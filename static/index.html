@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>休憩促進アプリ</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="connection-error" class="connection-error hidden">
+    サーバーに接続できません
+  </div>
+
+  <div class="container">
+    <h1 class="app-title">休憩促進アプリ</h1>
+
+    <!-- タイマー表示 -->
+    <div class="timer-section">
+      <div id="timer-display" class="timer-display">--:--</div>
+      <div id="session-elapsed" class="session-elapsed">セッション経過: --:--</div>
+    </div>
+
+    <!-- 累積バー -->
+    <div class="accum-section">
+      <div class="accum-label">
+        <span>累積作業時間</span>
+        <span id="accum-text">0分 / 180分</span>
+      </div>
+      <div class="accum-bar-track">
+        <div id="accum-bar" class="accum-bar"></div>
+      </div>
+    </div>
+
+    <!-- 操作ボタン -->
+    <div class="button-group">
+      <button id="btn-start" class="btn btn-primary">開始</button>
+      <button id="btn-pause" class="btn btn-secondary">停止</button>
+      <button id="btn-reset" class="btn btn-secondary">リセット</button>
+      <button id="btn-self" class="btn btn-self">自己申告</button>
+    </div>
+
+    <!-- タイマー間隔変更 -->
+    <div class="config-section">
+      <label for="input-duration">タイマー間隔（分）:</label>
+      <input id="input-duration" type="number" min="1" max="120" value="60" class="input-duration">
+      <button id="btn-config" class="btn btn-secondary">変更</button>
+    </div>
+
+    <!-- グラフ -->
+    <div class="charts-section">
+      <div class="chart-box">
+        <h3 class="chart-title">状態スコア推移</h3>
+        <canvas id="state-chart"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3 class="chart-title">連続作業時間</h3>
+        <canvas id="session-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- ログ一覧 -->
+    <div class="log-section">
+      <h3 class="log-title">最近の記録</h3>
+      <div id="log-list" class="log-list"></div>
+    </div>
+  </div>
+
+  <!-- ダイアログオーバーレイ -->
+  <div id="dialog-overlay" class="dialog-overlay hidden">
+    <div id="dialog-box" class="dialog-box">
+      <div id="step-indicator" class="step-indicator"></div>
+      <div id="step-content" class="step-content"></div>
+      <div id="advice-banner" class="advice-banner hidden"></div>
+      <div class="dialog-nav">
+        <button id="btn-back" class="btn btn-secondary" style="visibility:hidden">戻る</button>
+        <button id="btn-next" class="btn btn-primary">次へ</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
