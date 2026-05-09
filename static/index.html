@@ -69,6 +69,8 @@
   <!-- ダイアログオーバーレイ -->
   <div id="dialog-overlay" class="dialog-overlay hidden">
     <div id="dialog-box" class="dialog-box">
+      <!-- dialog-state-chart は JS が step-content 内に移動して使う -->
+      <canvas id="dialog-state-chart" style="display:none"></canvas>
       <div id="step-indicator" class="step-indicator"></div>
       <div id="step-content" class="step-content"></div>
       <div id="advice-banner" class="advice-banner hidden"></div>

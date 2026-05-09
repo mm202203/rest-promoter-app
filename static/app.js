@@ -38,6 +38,7 @@ const btnNextEl = document.getElementById('btn-next');
 let stateChart = null;
 let sessionChart = null;
 let dialogStateChart = null;
+let dialogChartCanvas = null; // DOM から切り離されても参照を保持するため変数で管理
 
 function initCharts() {
   const stateCtx = document.getElementById('state-chart').getContext('2d');
@@ -62,9 +63,9 @@ function initCharts() {
     },
   });
 
-  const dialogCtx = document.getElementById('dialog-state-chart');
-  if (dialogCtx) {
-    dialogStateChart = new Chart(dialogCtx.getContext('2d'), {
+  dialogChartCanvas = document.getElementById('dialog-state-chart');
+  if (dialogChartCanvas) {
+    dialogStateChart = new Chart(dialogChartCanvas.getContext('2d'), {
       type: 'line',
       data: { labels: [], datasets: [{ label: '状態スコア', data: [], pointBackgroundColor: [], borderColor: '#9e9e9e', tension: 0.3, fill: false }] },
       options: {
@@ -185,6 +186,7 @@ async function poll() {
       openDialog(state.dialog_mode);
     }
     const logsRes = await apiFetch('/logs');
+    lastLogsCache = logsRes.logs;
     updateCharts(logsRes.logs);
     renderLogs(logsRes.logs);
   } catch {
@@ -429,8 +431,10 @@ function renderActionSelect(mode) {
 function renderDialogChart() {
   const box = document.createElement('div');
   box.className = 'dialog-chart-box';
-  const canvas = document.getElementById('dialog-state-chart');
-  if (canvas) box.appendChild(canvas);
+  if (dialogChartCanvas) {
+    dialogChartCanvas.style.display = '';
+    box.appendChild(dialogChartCanvas); // 変数参照で再アタッチ（getElementById は切り離し後に見つけられない）
+  }
   stepContentEl.appendChild(box);
 }
 
