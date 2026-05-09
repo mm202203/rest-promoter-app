@@ -1,7 +1,13 @@
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from services.timer_service import get_state_snapshot
+from services.timer_service import (
+    do_config,
+    do_pause,
+    do_reset,
+    do_start,
+    get_state_snapshot,
+)
 
 router = APIRouter()
 
@@ -26,3 +32,24 @@ def get_state() -> dict:
         "prev_task": s.prev_task,
         "prev_load": s.prev_load,
     }
+
+
+@router.post("/start")
+def start() -> dict:
+    return {"status": do_start()}
+
+
+@router.post("/pause")
+def pause() -> dict:
+    return {"status": do_pause()}
+
+
+@router.post("/reset")
+def reset() -> dict:
+    return {"status": do_reset()}
+
+
+@router.post("/config")
+def config(body: ConfigRequest) -> dict:
+    do_config(body.duration_min * 60)
+    return {"status": "updated", "timer_duration": body.duration_min * 60}
