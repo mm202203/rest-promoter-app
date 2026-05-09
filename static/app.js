@@ -16,6 +16,7 @@ let pendingAdvice = null;
 
 // ── DOM 参照 ──────────────────────────────────────────────────
 const connectionErrorEl = document.getElementById('connection-error');
+const dangerWarningEl = document.getElementById('danger-warning');
 const timerDisplayEl = document.getElementById('timer-display');
 const sessionElapsedEl = document.getElementById('session-elapsed');
 const accumBarEl = document.getElementById('accum-bar');
@@ -57,7 +58,7 @@ function initCharts() {
     type: 'bar',
     data: { labels: [], datasets: [{ label: '作業時間(分)', data: [], backgroundColor: '#1976d2' }] },
     options: {
-      scales: { y: { min: 0, ticks: { stepSize: 10 } } },
+      scales: { y: { min: 0, ticks: { stepSize: 10, callback: v => `${v}分` } } },
       plugins: { legend: { display: false } },
       animation: false,
     },
@@ -151,8 +152,10 @@ function updateAccumBar(state) {
   accumBarEl.classList.remove('accum-warn', 'accum-danger');
   if (mins >= ACCUM_DANGER_MIN) {
     accumBarEl.classList.add('accum-danger');
-  } else if (mins >= ACCUM_WARN_MIN) {
-    accumBarEl.classList.add('accum-warn');
+    dangerWarningEl.classList.remove('hidden');
+  } else {
+    dangerWarningEl.classList.add('hidden');
+    if (mins >= ACCUM_WARN_MIN) accumBarEl.classList.add('accum-warn');
   }
 }
 
@@ -161,7 +164,7 @@ function updateButtonStates(state) {
   btnStartEl.disabled = breaking || state.is_running;
   btnPauseEl.disabled = breaking || !state.is_running;
   btnResetEl.disabled = breaking;
-  btnSelfEl.disabled = breaking || isDialogOpen;
+  btnSelfEl.disabled = isDialogOpen; // 休憩中も自己申告可能
   btnConfigEl.disabled = breaking;
 }
 
@@ -169,7 +172,10 @@ function updateUI(state) {
   updateTimerDisplay(state);
   updateAccumBar(state);
   updateButtonStates(state);
-  inputDurationEl.value = Math.round(state.timer_duration / 60);
+  // 入力中は上書きしない（ポーリングがユーザー入力を妨害するのを防ぐ）
+  if (document.activeElement !== inputDurationEl) {
+    inputDurationEl.value = Math.round(state.timer_duration / 60);
+  }
 }
 
 // ── ポーリング ────────────────────────────────────────────────
@@ -213,7 +219,7 @@ function renderLogs(logs) {
 
     const ts = document.createElement('span');
     ts.className = 'log-ts';
-    ts.textContent = l.timestamp.slice(5, 16);
+    ts.textContent = l.timestamp.replace('T', ' ').slice(5, 16);
 
     const task = document.createElement('span');
     task.className = 'log-task';
@@ -400,7 +406,7 @@ function renderActionSelect(mode) {
   if (mode !== 'force') {
     const snoozeLabel = document.createElement('div');
     snoozeLabel.className = 'action-label';
-    snoozeLabel.textContent = 'スヌーズ（後で）';
+    snoozeLabel.textContent = '作業を継続する（次の介入まで）';
     stepContentEl.appendChild(snoozeLabel);
 
     const snoozeGroup = document.createElement('div');

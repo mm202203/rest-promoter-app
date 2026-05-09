@@ -43,6 +43,31 @@ body {
   font-size: 14px;
 }
 
+/* 累積超過警告バナー（180分超過時に常時表示） */
+.danger-warning {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1900;
+  background: #b71c1c;
+  color: #fff;
+  text-align: center;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+.connection-error + .danger-warning:not(.hidden) {
+  top: 36px;
+}
+
+@keyframes pulse-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
+}
+
 .hidden {
   display: none !important;
 }
@@ -295,6 +320,12 @@ body {
 
 .dialog-box.state-low {
   border: 3px solid var(--color-dialog-danger);
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: var(--color-dialog-danger); box-shadow: 0 0 0 0 rgba(244,67,54,0.4); }
+  50% { border-color: #b71c1c; box-shadow: 0 0 0 6px rgba(244,67,54,0); }
 }
 
 /* ステップインジケーター */

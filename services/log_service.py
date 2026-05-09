@@ -1,7 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
+
+JST = timezone(timedelta(hours=9))
 
 CSV_PATH = Path("data/log.csv")
 COLUMNS = [
@@ -42,7 +44,7 @@ def append_log(
     snooze_min: int | None,
 ) -> None:
     record = {
-        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "timestamp": datetime.now(JST).strftime("%Y-%m-%dT%H:%M:%S"),
         "dialog_mode": dialog_mode,
         "task": _escape_csv_injection(task),
         "load": load,
