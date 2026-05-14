@@ -540,6 +540,19 @@ body {
   margin-bottom: 4px;
 }
 
+/* 本日の統計 */
+.stats-section {
+  display: flex;
+  gap: 24px;
+  font-size: 13px;
+  color: var(--color-text-sub);
+  margin-bottom: 16px;
+}
+
+.stats-section strong {
+  color: var(--color-text);
+}
+
 /* ダイアログナビ */
 .dialog-nav {
   display: flex;

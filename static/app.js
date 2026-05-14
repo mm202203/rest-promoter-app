@@ -15,6 +15,7 @@ let dialogData = {};
 let pendingAdvice = null;
 let dialogRoute = null;
 let breakDuration = null;
+let workDuration = null;
 
 // ── DOM 参照 ──────────────────────────────────────────────────
 const connectionErrorEl = document.getElementById('connection-error');
@@ -36,6 +37,8 @@ const stepContentEl = document.getElementById('step-content');
 const adviseBannerEl = document.getElementById('advice-banner');
 const btnBackEl = document.getElementById('btn-back');
 const btnNextEl = document.getElementById('btn-next');
+const statsWorkEl = document.getElementById('stats-work');
+const statsBreakEl = document.getElementById('stats-break');
 
 // ── Chart.js グラフ ───────────────────────────────────────────
 let stateChart = null;
@@ -87,21 +90,40 @@ function scoreColor(score) {
 }
 
 function updateCharts(logs) {
-  const stateLogs = logs.slice(-30);
+  const today = getTodayJST();
+  const todayLogs = logs.filter(l => l.timestamp && l.timestamp.startsWith(today));
+
+  const stateLogs = todayLogs.slice(-30);
   stateChart.data.labels = stateLogs.map(l => l.timestamp.slice(11, 16));
   stateChart.data.datasets[0].data = stateLogs.map(l => l.state);
   stateChart.data.datasets[0].pointBackgroundColor = stateLogs.map(l => scoreColor(l.state));
   stateChart.update();
 
-  const sessionLogs = logs.filter(l => l.session_min > 0).slice(-30);
+  const sessionLogs = todayLogs.filter(l => l.session_min > 0).slice(-30);
   sessionChart.data.labels = sessionLogs.map(l => l.timestamp.slice(11, 16));
   sessionChart.data.datasets[0].data = sessionLogs.map(l => l.session_min);
   sessionChart.update();
+
+  updateDailyStats(todayLogs);
+}
+
+function updateDailyStats(todayLogs) {
+  const completedWorkMin = todayLogs
+    .filter(l => l.action === 'rest' || l.action === 'skip')
+    .reduce((sum, l) => sum + (Number(l.session_min) || 0), 0);
+  const currentSessionMin = lastState ? Math.floor(lastState.session_elapsed / 60) : 0;
+  statsWorkEl.textContent = `${completedWorkMin + currentSessionMin}分`;
+
+  const totalBreakMin = todayLogs
+    .filter(l => l.action === 'rest')
+    .reduce((sum, l) => sum + (Number(l.break_min) || 0), 0);
+  statsBreakEl.textContent = `${totalBreakMin}分`;
 }
 
 function updateDialogChart(logs, previewScore) {
   if (!dialogStateChart) return;
-  const base = logs.slice(-29);
+  const today = getTodayJST();
+  const base = logs.filter(l => l.timestamp && l.timestamp.startsWith(today)).slice(-29);
   const allPoints = previewScore != null
     ? [...base, { timestamp: '今回', state: previewScore }]
     : base.slice(-30);
@@ -131,6 +153,10 @@ function formatMmss(sec) {
   return `${m}:${s}`;
 }
 
+function getTodayJST() {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 function showConnectionError() {
   connectionErrorEl.classList.remove('hidden');
 }
@@ -158,9 +184,13 @@ function updateTimerSvg(state, prevState) {
     breakDuration = null;
   }
 
+  if (!state.is_breaking && state.is_running && (!prevState || !prevState.is_running)) {
+    workDuration = state.remaining;
+  }
+
   const total = state.is_breaking
     ? (breakDuration ?? state.remaining)
-    : state.timer_duration;
+    : (workDuration ?? state.timer_duration);
   const ratio = total > 0 ? state.remaining / total : 1;
   const offset = CIRCUMFERENCE * (1 - ratio);
 

@@ -104,6 +104,12 @@ def do_reset() -> str:
 
 def do_config(duration_sec: int) -> None:
     with timer_lock:
+        if (
+            not timer_state.is_running
+            and not timer_state.is_breaking
+            and timer_state.remaining == timer_state.timer_duration
+        ):
+            timer_state.remaining = duration_sec
         timer_state.timer_duration = duration_sec
 
 
