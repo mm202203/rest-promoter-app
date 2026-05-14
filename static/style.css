@@ -143,6 +143,12 @@ body {
   background: var(--color-accum-danger);
 }
 
+.accum-hint {
+  font-size: 11px;
+  color: var(--color-text-sub);
+  margin-top: 4px;
+}
+
 /* ボタン */
 .button-group {
   display: flex;
@@ -183,6 +189,15 @@ body {
 
 .btn-secondary:hover:not(:disabled) {
   background: var(--color-bg);
+}
+
+.btn-end {
+  background: #546e7a;
+  color: #fff;
+}
+
+.btn-end:hover:not(:disabled) {
+  background: #455a64;
 }
 
 .btn-self {

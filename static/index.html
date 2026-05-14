@@ -44,12 +44,13 @@
     <!-- 累積バー -->
     <div class="accum-section">
       <div class="accum-label">
-        <span>累積作業時間</span>
+        <span>休憩なし連続作業時間</span>
         <span id="accum-text">0分 / 180分</span>
       </div>
       <div class="accum-bar-track">
         <div id="accum-bar" class="accum-bar"></div>
       </div>
+      <p class="accum-hint">休憩を取るとリセット。180分超で強制休憩モードに移行。</p>
     </div>
 
     <!-- 本日の統計 -->
@@ -63,10 +64,12 @@
       <button id="btn-start" class="btn btn-primary">開始</button>
       <button id="btn-pause" class="btn btn-secondary">停止</button>
       <button id="btn-reset" class="btn btn-secondary">リセット</button>
+      <button id="btn-end" class="btn btn-end">本日の作業終了</button>
       <button id="btn-self" class="btn btn-self">自己申告</button>
     </div>
 
-    <!-- タイマー間隔変更 -->
+    <!-- タイマー間隔変更（非表示中 - 復元するにはこのコメントを外す） -->
+    <!--
     <div class="config-section">
       <span class="config-label">タイマー間隔:</span>
       <div id="preset-group" class="preset-group">
@@ -78,6 +81,7 @@
         <button class="preset-btn" data-min="90">90分</button>
       </div>
     </div>
+    -->
 
     <!-- グラフ -->
     <div class="charts-section">
@@ -86,7 +90,7 @@
         <canvas id="state-chart"></canvas>
       </div>
       <div class="chart-box">
-        <h3 class="chart-title">連続作業時間</h3>
+        <h3 class="chart-title">作業・休憩時間</h3>
         <canvas id="session-chart"></canvas>
       </div>
     </div>

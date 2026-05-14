@@ -30,6 +30,7 @@ const btnStartEl = document.getElementById('btn-start');
 const btnPauseEl = document.getElementById('btn-pause');
 const btnResetEl = document.getElementById('btn-reset');
 const btnSelfEl = document.getElementById('btn-self');
+const btnEndEl = document.getElementById('btn-end');
 const dialogOverlayEl = document.getElementById('dialog-overlay');
 const dialogBoxEl = document.getElementById('dialog-box');
 const stepIndicatorEl = document.getElementById('step-indicator');
@@ -61,10 +62,16 @@ function initCharts() {
   const sessionCtx = document.getElementById('session-chart').getContext('2d');
   sessionChart = new Chart(sessionCtx, {
     type: 'bar',
-    data: { labels: [], datasets: [{ label: '作業時間(分)', data: [], backgroundColor: '#1976d2' }] },
+    data: {
+      labels: [],
+      datasets: [
+        { label: '作業', data: [], backgroundColor: '#1976d2' },
+        { label: '休憩', data: [], backgroundColor: '#4caf50' },
+      ],
+    },
     options: {
       scales: { y: { min: 0, ticks: { stepSize: 10, callback: v => `${v}分` } } },
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: true, labels: { boxWidth: 12, font: { size: 11 } } } },
       animation: false,
     },
   });
@@ -93,15 +100,16 @@ function updateCharts(logs) {
   const today = getTodayJST();
   const todayLogs = logs.filter(l => l.timestamp && l.timestamp.startsWith(today));
 
-  const stateLogs = todayLogs.slice(-30);
-  stateChart.data.labels = stateLogs.map(l => l.timestamp.slice(11, 16));
-  stateChart.data.datasets[0].data = stateLogs.map(l => l.state);
-  stateChart.data.datasets[0].pointBackgroundColor = stateLogs.map(l => scoreColor(l.state));
+  const chartLogs = todayLogs.slice(-30);
+
+  stateChart.data.labels = chartLogs.map(l => l.timestamp.slice(11, 16));
+  stateChart.data.datasets[0].data = chartLogs.map(l => l.state);
+  stateChart.data.datasets[0].pointBackgroundColor = chartLogs.map(l => scoreColor(l.state));
   stateChart.update();
 
-  const sessionLogs = todayLogs.filter(l => l.session_min > 0).slice(-30);
-  sessionChart.data.labels = sessionLogs.map(l => l.timestamp.slice(11, 16));
-  sessionChart.data.datasets[0].data = sessionLogs.map(l => l.session_min);
+  sessionChart.data.labels = chartLogs.map(l => l.timestamp.slice(11, 16));
+  sessionChart.data.datasets[0].data = chartLogs.map(l => Number(l.session_min) || 0);
+  sessionChart.data.datasets[1].data = chartLogs.map(l => Number(l.break_min) || 0);
   sessionChart.update();
 
   updateDailyStats(todayLogs);
@@ -232,6 +240,7 @@ function updateButtonStates(state) {
   btnStartEl.disabled = breaking || state.is_running;
   btnPauseEl.disabled = breaking || !state.is_running;
   btnResetEl.disabled = breaking;
+  btnEndEl.disabled = breaking;
   btnSelfEl.disabled = isDialogOpen; // 休憩中も自己申告可能
 }
 
@@ -670,6 +679,11 @@ btnPauseEl.addEventListener('click', async () => {
 });
 
 btnResetEl.addEventListener('click', async () => {
+  await apiFetch('/reset', 'POST');
+  await poll();
+});
+
+btnEndEl.addEventListener('click', async () => {
   await apiFetch('/reset', 'POST');
   await poll();
 });
