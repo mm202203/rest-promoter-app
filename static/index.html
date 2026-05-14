@@ -20,7 +20,24 @@
 
     <!-- タイマー表示 -->
     <div class="timer-section">
-      <div id="timer-display" class="timer-display">--:--</div>
+      <svg id="timer-svg" class="timer-svg" width="200" height="200"
+           viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <circle id="timer-track" cx="100" cy="100" r="88"
+                stroke="#e0e0e0" stroke-width="12" fill="none"/>
+        <circle id="timer-progress" cx="100" cy="100" r="88"
+                stroke="#1976d2" stroke-width="12" fill="none"
+                stroke-linecap="round"
+                transform="rotate(-90 100 100)"
+                stroke-dasharray="552.92" stroke-dashoffset="0"/>
+        <text id="timer-label" x="100" y="90"
+              text-anchor="middle" dominant-baseline="auto"
+              font-size="16" fill="#4caf50"
+              font-family="inherit" visibility="hidden">休憩</text>
+        <text id="timer-text" x="100" y="116"
+              text-anchor="middle" dominant-baseline="auto"
+              font-size="38" font-weight="700" fill="#212121"
+              font-variant-numeric="tabular-nums" font-family="inherit">--:--</text>
+      </svg>
       <div id="session-elapsed" class="session-elapsed">セッション経過: --:--</div>
     </div>
 
@@ -45,9 +62,15 @@
 
     <!-- タイマー間隔変更 -->
     <div class="config-section">
-      <label for="input-duration">タイマー間隔（分）:</label>
-      <input id="input-duration" type="number" min="1" max="120" value="60" class="input-duration">
-      <button id="btn-config" class="btn btn-secondary">変更</button>
+      <span class="config-label">タイマー間隔:</span>
+      <div id="preset-group" class="preset-group">
+        <button class="preset-btn" data-min="15">15分</button>
+        <button class="preset-btn" data-min="30">30分</button>
+        <button class="preset-btn" data-min="45">45分</button>
+        <button class="preset-btn" data-min="60">60分</button>
+        <button class="preset-btn" data-min="75">75分</button>
+        <button class="preset-btn" data-min="90">90分</button>
+      </div>
     </div>
 
     <!-- グラフ -->

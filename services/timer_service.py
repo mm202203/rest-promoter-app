@@ -2,8 +2,11 @@ import copy
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 
 from services.session_service import ACCUM_DANGER_SEC
+
+_JST = timezone(timedelta(hours=9))
 
 
 @dataclass
@@ -19,6 +22,7 @@ class TimerState:
     dialog_mode: str | None = None
     prev_task: str = ""
     prev_load: int = 3
+    session_start_time: str = ""
 
 
 timer_state = TimerState()
@@ -116,17 +120,24 @@ def do_record(
         if action == "start":
             timer_state.is_first = False
             timer_state.is_running = True
+            timer_state.session_start_time = datetime.now(_JST).strftime(
+                "%Y-%m-%dT%H:%M:%S"
+            )
         elif action == "rest":
             timer_state.accum_elapsed = 0
             timer_state.session_elapsed = 0
             timer_state.is_running = False
             timer_state.is_breaking = True
             timer_state.remaining = (break_min or 0) * 60
+            timer_state.session_start_time = ""
         elif action == "skip":
             timer_state.session_elapsed = 0
             timer_state.is_breaking = False
             timer_state.is_running = True
             timer_state.remaining = (snooze_min or 0) * 60
+            timer_state.session_start_time = datetime.now(_JST).strftime(
+                "%Y-%m-%dT%H:%M:%S"
+            )
 
 
 def do_ack() -> None:

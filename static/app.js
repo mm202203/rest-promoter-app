@@ -13,11 +13,15 @@ let currentDialogMode = null;
 let currentStep = 1;
 let dialogData = {};
 let pendingAdvice = null;
+let dialogRoute = null;
+let breakDuration = null;
 
 // ── DOM 参照 ──────────────────────────────────────────────────
 const connectionErrorEl = document.getElementById('connection-error');
 const dangerWarningEl = document.getElementById('danger-warning');
-const timerDisplayEl = document.getElementById('timer-display');
+const timerProgressEl = document.getElementById('timer-progress');
+const timerTextEl = document.getElementById('timer-text');
+const timerLabelEl = document.getElementById('timer-label');
 const sessionElapsedEl = document.getElementById('session-elapsed');
 const accumBarEl = document.getElementById('accum-bar');
 const accumTextEl = document.getElementById('accum-text');
@@ -25,8 +29,6 @@ const btnStartEl = document.getElementById('btn-start');
 const btnPauseEl = document.getElementById('btn-pause');
 const btnResetEl = document.getElementById('btn-reset');
 const btnSelfEl = document.getElementById('btn-self');
-const btnConfigEl = document.getElementById('btn-config');
-const inputDurationEl = document.getElementById('input-duration');
 const dialogOverlayEl = document.getElementById('dialog-overlay');
 const dialogBoxEl = document.getElementById('dialog-box');
 const stepIndicatorEl = document.getElementById('step-indicator');
@@ -109,6 +111,19 @@ function updateDialogChart(logs, previewScore) {
   dialogStateChart.update();
 }
 
+// ── 音声通知 ──────────────────────────────────────────────────
+function speak(text) {
+  try {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'ja-JP';
+    window.speechSynthesis.speak(utter);
+  } catch (_) {
+    // silent fallback
+  }
+}
+
 // ── ユーティリティ ────────────────────────────────────────────
 function formatMmss(sec) {
   const m = Math.floor(sec / 60).toString().padStart(2, '0');
@@ -133,14 +148,37 @@ async function apiFetch(path, method = 'GET', body = null) {
 }
 
 // ── UI 更新 ───────────────────────────────────────────────────
-function updateTimerDisplay(state) {
-  if (state.is_breaking) {
-    timerDisplayEl.textContent = `休憩中 ${formatMmss(state.remaining)}`;
-    timerDisplayEl.classList.add('is-breaking');
-  } else {
-    timerDisplayEl.textContent = formatMmss(state.remaining);
-    timerDisplayEl.classList.remove('is-breaking');
+function updateTimerSvg(state, prevState) {
+  const CIRCUMFERENCE = 552.92;
+
+  if (state.is_breaking && (!prevState || !prevState.is_breaking)) {
+    breakDuration = state.remaining;
   }
+  if (!state.is_breaking) {
+    breakDuration = null;
+  }
+
+  const total = state.is_breaking
+    ? (breakDuration ?? state.remaining)
+    : state.timer_duration;
+  const ratio = total > 0 ? state.remaining / total : 1;
+  const offset = CIRCUMFERENCE * (1 - ratio);
+
+  timerProgressEl.setAttribute('stroke-dashoffset', offset.toFixed(2));
+  timerProgressEl.setAttribute('stroke', state.is_breaking ? '#4caf50' : '#1976d2');
+
+  if (state.is_breaking) {
+    timerTextEl.textContent = formatMmss(state.remaining);
+    timerTextEl.setAttribute('font-size', '24');
+    timerTextEl.setAttribute('fill', '#4caf50');
+    timerLabelEl.setAttribute('visibility', 'visible');
+  } else {
+    timerTextEl.textContent = formatMmss(state.remaining);
+    timerTextEl.setAttribute('font-size', '38');
+    timerTextEl.setAttribute('fill', '#212121');
+    timerLabelEl.setAttribute('visibility', 'hidden');
+  }
+
   sessionElapsedEl.textContent = `セッション経過: ${formatMmss(state.session_elapsed)}`;
 }
 
@@ -165,17 +203,22 @@ function updateButtonStates(state) {
   btnPauseEl.disabled = breaking || !state.is_running;
   btnResetEl.disabled = breaking;
   btnSelfEl.disabled = isDialogOpen; // 休憩中も自己申告可能
-  btnConfigEl.disabled = breaking;
 }
 
-function updateUI(state) {
-  updateTimerDisplay(state);
+function updatePresetHighlight(state) {
+  const currentMin = Math.round(state.timer_duration / 60);
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    const isActive = parseInt(btn.dataset.min, 10) === currentMin;
+    btn.classList.toggle('active', isActive);
+    btn.disabled = state.is_breaking;
+  });
+}
+
+function updateUI(state, prevState) {
+  updateTimerSvg(state, prevState);
   updateAccumBar(state);
   updateButtonStates(state);
-  // 入力中は上書きしない（ポーリングがユーザー入力を妨害するのを防ぐ）
-  if (document.activeElement !== inputDurationEl) {
-    inputDurationEl.value = Math.round(state.timer_duration / 60);
-  }
+  updatePresetHighlight(state);
 }
 
 // ── ポーリング ────────────────────────────────────────────────
@@ -185,10 +228,16 @@ async function poll() {
   try {
     const state = await apiFetch('/state');
     hideConnectionError();
+    const prevState = lastState;
     lastState = state;
-    updateUI(state);
+    updateUI(state, prevState);
     if (state.dialog_triggered && !isDialogOpen) {
+      const wasBreaking = prevState && prevState.is_breaking;
       await apiFetch('/dialog/ack', 'POST');
+      speak(wasBreaking
+        ? '休憩が終わりました。今の状態を教えてください。'
+        : '作業時間が終わりました。今の状態を教えてください。'
+      );
       openDialog(state.dialog_mode);
     }
     const logsRes = await apiFetch('/logs');
@@ -240,8 +289,12 @@ function renderLogs(logs) {
 const logListEl = document.getElementById('log-list');
 
 // ── ダイアログ ────────────────────────────────────────────────
-function totalSteps(mode) {
-  return mode === 'first' ? 3 : 4;
+function getStepCount(mode, route) {
+  if (mode === 'first') return 3;
+  if (mode === 'force') return 2;
+  if (route === 'rest') return 3;
+  if (route === 'continue') return 5;
+  return 5;
 }
 
 function openDialog(mode) {
@@ -249,6 +302,7 @@ function openDialog(mode) {
   currentStep = 1;
   isDialogOpen = true;
   pendingAdvice = null;
+  dialogRoute = null;
   dialogData = { state: null, task: '', load: null, action: null, break_min: null, snooze_min: null };
   dialogBoxEl.classList.remove('state-low');
   dialogOverlayEl.classList.remove('hidden');
@@ -258,6 +312,7 @@ function openDialog(mode) {
 function closeDialog() {
   dialogOverlayEl.classList.add('hidden');
   isDialogOpen = false;
+  dialogRoute = null;
 }
 
 function updateStepIndicator(step, total) {
@@ -274,7 +329,7 @@ function updateStepIndicator(step, total) {
 function showStep(step) {
   currentStep = step;
   const mode = currentDialogMode;
-  const total = totalSteps(mode);
+  const total = getStepCount(mode, dialogRoute);
   updateStepIndicator(step, total);
   adviseBannerEl.classList.add('hidden');
   stepContentEl.textContent = '';
@@ -293,17 +348,97 @@ function renderFirstStep(step) {
 }
 
 function renderTimerStep(step, mode) {
+  if (mode === 'force') {
+    if (step === 1) { renderStateSelect(); renderDialogChart(); }
+    else if (step === 2) renderBreakSelect(true);
+    return;
+  }
+  // timer / self
   if (step === 1) {
     renderStateSelect();
     renderDialogChart();
   } else if (step === 2) {
-    if (pendingAdvice) showAdviceBanner(pendingAdvice);
-    renderTaskInput('現在の作業内容を確認・修正してください');
-  } else if (step === 3) {
-    renderLoadSelect();
-  } else if (step === 4) {
-    renderActionSelect(mode);
+    renderRouteChoice();
+  } else if (dialogRoute === 'rest') {
+    if (step === 3) renderBreakSelect(false);
+  } else {
+    // continue route
+    if (step === 3) {
+      if (pendingAdvice) showAdviceBanner(pendingAdvice);
+      renderTaskInput('現在の作業内容を確認・修正してください');
+    } else if (step === 4) {
+      renderLoadSelect();
+    } else if (step === 5) {
+      renderSnoozeSelect();
+    }
   }
+}
+
+function renderRouteChoice() {
+  const title = document.createElement('div');
+  title.className = 'step-title';
+  title.textContent = '次のアクションを選択してください';
+  stepContentEl.appendChild(title);
+
+  for (const [route, label] of [['rest', '休憩する'], ['continue', '作業を続ける']]) {
+    const btn = document.createElement('button');
+    btn.className = 'route-btn' + (dialogRoute === route ? ' selected' : '');
+    btn.textContent = label;
+    btn.addEventListener('click', () => {
+      dialogRoute = route;
+      stepContentEl.querySelectorAll('.route-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      updateStepIndicator(currentStep, getStepCount(currentDialogMode, dialogRoute));
+    });
+    stepContentEl.appendChild(btn);
+  }
+}
+
+function renderBreakSelect(forceOnly) {
+  const title = document.createElement('div');
+  title.className = 'step-title';
+  title.textContent = '休憩時間を選択してください';
+  stepContentEl.appendChild(title);
+
+  const group = document.createElement('div');
+  group.className = 'radio-group';
+  const options = forceOnly ? [15] : [5, 10, 15, 60];
+  for (const min of options) {
+    const btn = document.createElement('button');
+    btn.className = 'radio-btn' + (dialogData.break_min === min ? ' selected' : '');
+    btn.textContent = `${min}分`;
+    btn.addEventListener('click', () => {
+      dialogData.action = 'rest';
+      dialogData.break_min = min;
+      group.querySelectorAll('.radio-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+    group.appendChild(btn);
+  }
+  stepContentEl.appendChild(group);
+}
+
+function renderSnoozeSelect() {
+  const title = document.createElement('div');
+  title.className = 'step-title';
+  title.textContent = 'スヌーズ時間を選択してください';
+  stepContentEl.appendChild(title);
+
+  const group = document.createElement('div');
+  group.className = 'radio-group';
+  for (const min of [15, 30, 45, 60]) {
+    const btn = document.createElement('button');
+    btn.className = 'radio-btn' + (dialogData.snooze_min === min ? ' selected' : '');
+    btn.textContent = `${min}分後`;
+    btn.addEventListener('click', () => {
+      dialogData.action = 'skip';
+      dialogData.snooze_min = min;
+      group.querySelectorAll('.radio-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+    group.appendChild(btn);
+  }
+  stepContentEl.appendChild(group);
 }
 
 function renderTaskInput(label) {
@@ -374,66 +509,6 @@ function renderLoadSelect() {
   stepContentEl.appendChild(group);
 }
 
-function renderActionSelect(mode) {
-  const title = document.createElement('div');
-  title.className = 'step-title';
-  title.textContent = '次のアクションを選択してください';
-  stepContentEl.appendChild(title);
-
-  const restLabel = document.createElement('div');
-  restLabel.className = 'action-label';
-  restLabel.textContent = '休憩する';
-  stepContentEl.appendChild(restLabel);
-
-  const restGroup = document.createElement('div');
-  restGroup.className = 'radio-group';
-  const restOptions = mode === 'force' ? [15] : [5, 10, 15];
-  for (const min of restOptions) {
-    const btn = document.createElement('button');
-    btn.className = 'radio-btn' + (dialogData.action === 'rest' && dialogData.break_min === min ? ' selected' : '');
-    btn.textContent = `${min}分`;
-    btn.addEventListener('click', () => {
-      dialogData.action = 'rest';
-      dialogData.break_min = min;
-      dialogData.snooze_min = null;
-      document.querySelectorAll('.radio-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-    });
-    restGroup.appendChild(btn);
-  }
-  stepContentEl.appendChild(restGroup);
-
-  if (mode !== 'force') {
-    const snoozeLabel = document.createElement('div');
-    snoozeLabel.className = 'action-label';
-    snoozeLabel.textContent = '作業を継続する（次の介入まで）';
-    stepContentEl.appendChild(snoozeLabel);
-
-    const snoozeGroup = document.createElement('div');
-    snoozeGroup.className = 'radio-group';
-    for (const min of [15, 30, 45, 60]) {
-      const btn = document.createElement('button');
-      btn.className = 'radio-btn' + (dialogData.action === 'skip' && dialogData.snooze_min === min ? ' selected' : '');
-      btn.textContent = `${min}分後`;
-      btn.addEventListener('click', () => {
-        dialogData.action = 'skip';
-        dialogData.snooze_min = min;
-        dialogData.break_min = null;
-        document.querySelectorAll('.radio-btn').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-      });
-      snoozeGroup.appendChild(btn);
-    }
-    stepContentEl.appendChild(snoozeGroup);
-  }
-
-  const errEl = document.createElement('div');
-  errEl.className = 'field-error hidden';
-  errEl.id = 'action-error';
-  errEl.textContent = 'アクションを選択してください';
-  stepContentEl.appendChild(errEl);
-}
-
 function renderDialogChart() {
   const box = document.createElement('div');
   box.className = 'dialog-chart-box';
@@ -459,7 +534,7 @@ async function fetchAdvice(stateScore, load) {
 
 async function onNextClick() {
   const mode = currentDialogMode;
-  const total = totalSteps(mode);
+  const total = getStepCount(mode, dialogRoute);
 
   // バリデーション
   if (mode === 'first') {
@@ -474,29 +549,33 @@ async function onNextClick() {
     }
     if (currentStep === 2 && dialogData.load == null) return;
     if (currentStep === 3 && dialogData.state == null) return;
-  } else {
+  } else if (mode === 'force') {
     if (currentStep === 1 && dialogData.state == null) return;
-    if (currentStep === 2) {
-      const taskEl = document.getElementById('input-task');
-      const errEl = document.getElementById('task-error');
-      if (!taskEl || !taskEl.value.trim()) {
-        if (errEl) errEl.classList.remove('hidden');
-        return;
+    if (currentStep === 2 && dialogData.break_min == null) return;
+  } else {
+    // timer / self
+    if (currentStep === 1 && dialogData.state == null) return;
+    if (currentStep === 2 && dialogRoute == null) return;
+    if (dialogRoute === 'rest') {
+      if (currentStep === 3 && dialogData.break_min == null) return;
+    } else {
+      // continue
+      if (currentStep === 3) {
+        const taskEl = document.getElementById('input-task');
+        const errEl = document.getElementById('task-error');
+        if (!taskEl || !taskEl.value.trim()) {
+          if (errEl) errEl.classList.remove('hidden');
+          return;
+        }
+        dialogData.task = taskEl.value.trim();
       }
-      dialogData.task = taskEl.value.trim();
-    }
-    if (currentStep === 3 && dialogData.load == null) return;
-    if (currentStep === 4) {
-      const errEl = document.getElementById('action-error');
-      if (dialogData.action == null) {
-        if (errEl) errEl.classList.remove('hidden');
-        return;
-      }
+      if (currentStep === 4 && dialogData.load == null) return;
+      if (currentStep === 5 && dialogData.snooze_min == null) return;
     }
   }
 
-  // Step1 完了後（timer/self/force）: アドバイス取得
-  if (mode !== 'first' && currentStep === 1) {
+  // Step1 完了後（timer/self）: アドバイス取得
+  if ((mode === 'timer' || mode === 'self') && currentStep === 1) {
     const prevLoad = lastState ? lastState.prev_load : 3;
     await fetchAdvice(dialogData.state, prevLoad);
   }
@@ -514,14 +593,32 @@ function onBackClick() {
 
 async function submitDialog() {
   const mode = currentDialogMode;
+  let task, load, action, break_min, snooze_min;
+
+  if (mode === 'first') {
+    task = dialogData.task;
+    load = dialogData.load;
+    action = 'start';
+  } else if (dialogRoute === 'rest' || mode === 'force') {
+    task = lastState ? lastState.prev_task : '';
+    load = lastState ? lastState.prev_load : 3;
+    action = 'rest';
+    break_min = dialogData.break_min;
+  } else {
+    task = dialogData.task;
+    load = dialogData.load;
+    action = 'skip';
+    snooze_min = dialogData.snooze_min;
+  }
+
   const payload = {
     dialog_mode: mode,
-    task: dialogData.task,
-    load: dialogData.load,
+    task,
+    load,
     state: dialogData.state,
-    action: mode === 'first' ? 'start' : dialogData.action,
-    break_min: dialogData.break_min || null,
-    snooze_min: dialogData.snooze_min || null,
+    action,
+    break_min: break_min || null,
+    snooze_min: snooze_min || null,
   };
   await apiFetch('/record', 'POST', payload);
   closeDialog();
@@ -552,14 +649,12 @@ btnSelfEl.addEventListener('click', () => {
   openDialog('self');
 });
 
-btnConfigEl.addEventListener('click', async () => {
-  const min = parseInt(inputDurationEl.value, 10);
-  if (isNaN(min) || min < 1 || min > 120) {
-    alert('1〜120分の範囲で入力してください');
-    return;
-  }
-  await apiFetch('/config', 'POST', { duration_min: min });
-  await poll();
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const min = parseInt(btn.dataset.min, 10);
+    await apiFetch('/config', 'POST', { duration_min: min });
+    await poll();
+  });
 });
 
 btnNextEl.addEventListener('click', onNextClick);

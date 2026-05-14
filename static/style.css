@@ -96,16 +96,9 @@ body {
   border: 1px solid var(--color-border);
 }
 
-.timer-display {
-  font-size: 64px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 2px;
-  color: var(--color-text);
-}
-
-.timer-display.is-breaking {
-  color: var(--color-accum-normal);
+.timer-svg {
+  display: block;
+  margin: 0 auto;
 }
 
 .session-elapsed {
@@ -210,15 +203,44 @@ body {
   margin-bottom: 32px;
   font-size: 13px;
   color: var(--color-text-sub);
+  flex-wrap: wrap;
 }
 
-.input-duration {
-  width: 70px;
-  padding: 6px 8px;
+.config-label {
+  font-size: 13px;
+  color: var(--color-text-sub);
+  white-space: nowrap;
+}
+
+.preset-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.preset-btn {
+  padding: 6px 14px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  font-size: 14px;
-  text-align: center;
+  cursor: pointer;
+  font-size: 13px;
+  background: var(--color-surface);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.preset-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.preset-btn.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.preset-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* グラフ */
@@ -454,6 +476,32 @@ body {
 }
 
 .radio-btn.selected {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* ルート選択ボタン（休憩する / 作業を続ける） */
+.route-btn {
+  display: block;
+  width: 100%;
+  padding: 12px 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--color-surface);
+  text-align: left;
+  transition: border-color 0.2s, background 0.2s;
+  margin-bottom: 8px;
+}
+
+.route-btn:hover {
+  border-color: var(--color-primary);
+}
+
+.route-btn.selected {
   border-color: var(--color-primary);
   background: var(--color-primary);
   color: #fff;
