@@ -44,37 +44,55 @@ const btnReportEl = document.getElementById('btn-report');
 
 // ── Chart.js グラフ ───────────────────────────────────────────
 let stateChart = null;
-let sessionChart = null;
 let dialogStateChart = null;
 let dialogChartCanvas = null; // DOM から切り離されても参照を保持するため変数で管理
+
+let breakFlagsCache = []; // breakLinePlugin から参照
+
+const breakLinePlugin = {
+  id: 'breakLines',
+  beforeDatasetsDraw(chart) {
+    const { ctx, scales } = chart;
+    breakFlagsCache.forEach((isBreak, i) => {
+      if (!isBreak) return;
+      const meta = chart.getDatasetMeta(0);
+      if (!meta.data[i]) return;
+      const x = meta.data[i].x;
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = 'rgba(59, 109, 17, 0.5)';
+      ctx.lineWidth = 2;
+      ctx.moveTo(x, scales.y.top);
+      ctx.lineTo(x, scales.y.bottom);
+      ctx.stroke();
+      ctx.restore();
+    });
+  },
+};
 
 function initCharts() {
   const stateCtx = document.getElementById('state-chart').getContext('2d');
   stateChart = new Chart(stateCtx, {
     type: 'line',
-    data: { labels: [], datasets: [{ label: '状態スコア', data: [], pointBackgroundColor: [], borderColor: '#9e9e9e', tension: 0.3, fill: false }] },
+    data: {
+      labels: [],
+      datasets: [{
+        label: '状態スコア',
+        data: [],
+        pointBackgroundColor: [],
+        pointRadius: [],
+        borderColor: '#d0d0d0',
+        tension: 0.3,
+        fill: false,
+      }],
+    },
     options: {
       scales: { y: { min: 1, max: 5, ticks: { stepSize: 1 } } },
       plugins: { legend: { display: false } },
       animation: false,
     },
-  });
-
-  const sessionCtx = document.getElementById('session-chart').getContext('2d');
-  sessionChart = new Chart(sessionCtx, {
-    type: 'bar',
-    data: {
-      labels: [],
-      datasets: [
-        { label: '作業', data: [], backgroundColor: [] },
-        { label: '休憩', data: [], backgroundColor: '#4caf50' },
-      ],
-    },
-    options: {
-      scales: { y: { min: 0, ticks: { stepSize: 10, callback: v => `${v}分` } } },
-      plugins: { legend: { display: true, labels: { boxWidth: 12, font: { size: 11 } } } },
-      animation: false,
-    },
+    plugins: [breakLinePlugin],
   });
 
   dialogChartCanvas = document.getElementById('dialog-state-chart');
@@ -92,9 +110,9 @@ function initCharts() {
 }
 
 function loadColor(load) {
-  if (load >= 4) return '#e53935';
-  if (load === 3) return '#1976d2';
-  return '#64b5f6';
+  if (load >= 4) return '#D85A30';
+  if (load === 3) return '#888780';
+  return '#4A90D9';
 }
 
 function scoreColor(score) {
@@ -107,18 +125,19 @@ function updateCharts(logs) {
   const today = getTodayJST();
   const todayLogs = logs.filter(l => l.timestamp && l.timestamp.startsWith(today));
 
-  const chartLogs = todayLogs.slice(-30);
+  const chartLogs = todayLogs
+    .filter(l => l.action === 'rest' || l.action === 'skip')
+    .slice(-30);
 
   stateChart.data.labels = chartLogs.map(l => l.timestamp.slice(11, 16));
   stateChart.data.datasets[0].data = chartLogs.map(l => l.state);
-  stateChart.data.datasets[0].pointBackgroundColor = chartLogs.map(l => scoreColor(l.state));
+  stateChart.data.datasets[0].pointBackgroundColor = chartLogs.map(l => loadColor(Number(l.load) || 3));
+  stateChart.data.datasets[0].pointRadius = chartLogs.map(l => {
+    const m = Number(l.session_min) || 0;
+    return 4 + Math.min(m, 60) / 60 * 8;
+  });
+  breakFlagsCache = chartLogs.map(l => l.action === 'rest');
   stateChart.update();
-
-  sessionChart.data.labels = chartLogs.map(l => l.timestamp.slice(11, 16));
-  sessionChart.data.datasets[0].data = chartLogs.map(l => Number(l.session_min) || 0);
-  sessionChart.data.datasets[0].backgroundColor = chartLogs.map(l => loadColor(Number(l.load) || 3));
-  sessionChart.data.datasets[1].data = chartLogs.map(l => Number(l.break_min) || 0);
-  sessionChart.update();
 
   updateDailyStats(todayLogs);
 }

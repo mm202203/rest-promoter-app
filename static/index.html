@@ -88,17 +88,15 @@
     <div class="charts-section">
       <div class="chart-box">
         <h3 class="chart-title">状態スコア推移</h3>
-        <canvas id="state-chart"></canvas>
-      </div>
-      <div class="chart-box">
-        <h3 class="chart-title">作業・休憩時間</h3>
         <div class="chart-legend-note">
-          作業の負荷:
-          <span class="legend-chip" style="background:#64b5f6">低(1-2)</span>
-          <span class="legend-chip" style="background:#1976d2">中(3)</span>
-          <span class="legend-chip" style="background:#e53935">高(4-5)</span>
+          作業負荷:
+          <span class="legend-chip" style="background:#4A90D9">低(1-2)</span>
+          <span class="legend-chip" style="background:#888780">中(3)</span>
+          <span class="legend-chip" style="background:#D85A30">高(4-5)</span>
+          <span class="legend-vline"></span>休憩
         </div>
-        <canvas id="session-chart"></canvas>
+        <div class="chart-legend-note">点の大きさ＝作業時間（最大60分）</div>
+        <canvas id="state-chart"></canvas>
       </div>
     </div>
 

@@ -261,7 +261,7 @@ body {
 /* グラフ */
 .charts-section {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 16px;
   margin-bottom: 24px;
 }
@@ -295,6 +295,15 @@ body {
   border-radius: 3px;
   padding: 1px 6px;
   font-size: 11px;
+}
+
+.legend-vline {
+  display: inline-block;
+  width: 0;
+  height: 14px;
+  border-left: 2px dashed rgba(59, 109, 17, 0.6);
+  margin: 0 4px;
+  vertical-align: middle;
 }
 
 /* ログ一覧 */
