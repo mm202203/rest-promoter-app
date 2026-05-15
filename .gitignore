@@ -1,4 +1,4 @@
 data/log.csv
 __pycache__/
 .venv/
-output/*
+output/*.md
