@@ -40,6 +40,7 @@ const btnBackEl = document.getElementById('btn-back');
 const btnNextEl = document.getElementById('btn-next');
 const statsWorkEl = document.getElementById('stats-work');
 const statsBreakEl = document.getElementById('stats-break');
+const btnReportEl = document.getElementById('btn-report');
 
 // ── Chart.js グラフ ───────────────────────────────────────────
 let stateChart = null;
@@ -65,7 +66,7 @@ function initCharts() {
     data: {
       labels: [],
       datasets: [
-        { label: '作業', data: [], backgroundColor: '#1976d2' },
+        { label: '作業', data: [], backgroundColor: [] },
         { label: '休憩', data: [], backgroundColor: '#4caf50' },
       ],
     },
@@ -90,6 +91,12 @@ function initCharts() {
   }
 }
 
+function loadColor(load) {
+  if (load >= 4) return '#e53935';
+  if (load === 3) return '#1976d2';
+  return '#64b5f6';
+}
+
 function scoreColor(score) {
   if (score <= 2) return '#f44336';
   if (score === 3) return '#9e9e9e';
@@ -109,6 +116,7 @@ function updateCharts(logs) {
 
   sessionChart.data.labels = chartLogs.map(l => l.timestamp.slice(11, 16));
   sessionChart.data.datasets[0].data = chartLogs.map(l => Number(l.session_min) || 0);
+  sessionChart.data.datasets[0].backgroundColor = chartLogs.map(l => loadColor(Number(l.load) || 3));
   sessionChart.data.datasets[1].data = chartLogs.map(l => Number(l.break_min) || 0);
   sessionChart.update();
 
@@ -122,10 +130,13 @@ function updateDailyStats(todayLogs) {
   const currentSessionMin = lastState ? Math.floor(lastState.session_elapsed / 60) : 0;
   statsWorkEl.textContent = `${completedWorkMin + currentSessionMin}分`;
 
-  const totalBreakMin = todayLogs
-    .filter(l => l.action === 'rest')
-    .reduce((sum, l) => sum + (Number(l.break_min) || 0), 0);
-  statsBreakEl.textContent = `${totalBreakMin}分`;
+  const restLogs = todayLogs.filter(l => l.action === 'rest');
+  const completedRestLogs = (lastState && lastState.is_breaking)
+    ? restLogs.slice(0, -1)
+    : restLogs;
+  const completedBreakMin = completedRestLogs.reduce((sum, l) => sum + (Number(l.break_min) || 0), 0);
+  const currentBreakMin = lastState ? Math.floor((lastState.break_elapsed || 0) / 60) : 0;
+  statsBreakEl.textContent = `${completedBreakMin + currentBreakMin}分`;
 }
 
 function updateDialogChart(logs, previewScore) {
@@ -273,10 +284,12 @@ async function poll() {
     if (state.dialog_triggered && !isDialogOpen) {
       const wasBreaking = prevState && prevState.is_breaking;
       await apiFetch('/dialog/ack', 'POST');
-      speak(wasBreaking
-        ? '休憩が終わりました。今の状態を教えてください。'
-        : '作業時間が終わりました。今の状態を教えてください。'
-      );
+      const msg = state.dialog_mode === 'first'
+        ? 'おはようございます。本日の状態を教えてください。'
+        : wasBreaking
+          ? '休憩が終わりました。今の状態を教えてください。'
+          : '作業時間が終わりました。今の状態を教えてください。';
+      speak(msg);
       openDialog(state.dialog_mode);
     }
     const logsRes = await apiFetch('/logs');
@@ -311,7 +324,7 @@ function renderLogs(logs) {
 
     const task = document.createElement('span');
     task.className = 'log-task';
-    task.textContent = l.task;
+    task.textContent = l.action === 'rest' ? '' : l.task;
 
     const action = document.createElement('span');
     action.className = 'log-action';
@@ -388,14 +401,18 @@ function renderFirstStep(step) {
 
 function renderTimerStep(step, mode) {
   if (mode === 'force') {
-    if (step === 1) { renderStateSelect(); renderDialogChart(); }
-    else if (step === 2) renderBreakSelect(true);
+    if (step === 1) {
+      renderStateSelect();
+      renderDialogChart();
+      updateDialogChart(lastLogsCache, null);
+    } else if (step === 2) renderBreakSelect(true);
     return;
   }
   // timer / self
   if (step === 1) {
     renderStateSelect();
     renderDialogChart();
+    updateDialogChart(lastLogsCache, null);
   } else if (step === 2) {
     renderRouteChoice();
   } else if (dialogRoute === 'rest') {
@@ -639,7 +656,7 @@ async function submitDialog() {
     load = dialogData.load;
     action = 'start';
   } else if (dialogRoute === 'rest' || mode === 'force') {
-    task = lastState ? lastState.prev_task : '';
+    task = '';
     load = lastState ? lastState.prev_load : 3;
     action = 'rest';
     break_min = dialogData.break_min;
@@ -691,6 +708,19 @@ btnEndEl.addEventListener('click', async () => {
 btnSelfEl.addEventListener('click', () => {
   if (isDialogOpen) return;
   openDialog('self');
+});
+
+btnReportEl.addEventListener('click', async () => {
+  try {
+    const res = await apiFetch('/report', 'POST');
+    const blob = new Blob([res.content], { type: 'text/markdown' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = res.filename;
+    a.click();
+  } catch (e) {
+    alert(`日報の出力に失敗しました。サーバーを再起動してから再度お試しください。\n${e}`);
+  }
 });
 
 document.querySelectorAll('.preset-btn').forEach(btn => {

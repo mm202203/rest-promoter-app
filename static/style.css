@@ -277,7 +277,24 @@ body {
   font-size: 13px;
   font-weight: 600;
   color: var(--color-text-sub);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
+}
+
+.chart-legend-note {
+  font-size: 11px;
+  color: var(--color-text-sub);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.legend-chip {
+  color: #fff;
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 11px;
 }
 
 /* ログ一覧 */

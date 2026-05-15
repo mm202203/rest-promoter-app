@@ -18,6 +18,7 @@ class TimerState:
     timer_duration: int = 3600
     session_elapsed: int = 0
     accum_elapsed: int = 0
+    break_elapsed: int = 0
     dialog_triggered: bool = False
     dialog_mode: str | None = None
     prev_task: str = ""
@@ -41,6 +42,7 @@ def _tick() -> None:
             if timer_state.is_breaking:
                 if timer_state.remaining > 0:
                     timer_state.remaining -= 1
+                    timer_state.break_elapsed += 1
                 if timer_state.remaining == 0:
                     timer_state.is_breaking = False
                     timer_state.is_running = False
@@ -132,6 +134,7 @@ def do_record(
         elif action == "rest":
             timer_state.accum_elapsed = 0
             timer_state.session_elapsed = 0
+            timer_state.break_elapsed = 0
             timer_state.is_running = False
             timer_state.is_breaking = True
             timer_state.remaining = (break_min or 0) * 60
@@ -144,6 +147,33 @@ def do_record(
             timer_state.session_start_time = datetime.now(_JST).strftime(
                 "%Y-%m-%dT%H:%M:%S"
             )
+
+
+def restore_work_state(
+    session_elapsed: int, remaining_sec: int, task: str, load: int
+) -> None:
+    with timer_lock:
+        timer_state.is_first = False
+        timer_state.session_elapsed = session_elapsed
+        timer_state.remaining = remaining_sec
+        timer_state.prev_task = task
+        timer_state.prev_load = load
+        if remaining_sec > 0:
+            timer_state.is_running = True
+        else:
+            # タイマーが切れている → ダイアログを出す
+            timer_state.is_running = False
+            timer_state.dialog_triggered = True
+            timer_state.dialog_mode = "timer"
+
+
+def restore_break_state(elapsed_sec: int, break_min: int) -> None:
+    total_sec = break_min * 60
+    with timer_lock:
+        timer_state.is_breaking = True
+        timer_state.is_first = False
+        timer_state.break_elapsed = min(elapsed_sec, total_sec)
+        timer_state.remaining = max(total_sec - elapsed_sec, 0)
 
 
 def do_ack() -> None:

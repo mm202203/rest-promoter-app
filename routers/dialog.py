@@ -15,7 +15,7 @@ router = APIRouter()
 
 class RecordRequest(BaseModel):
     dialog_mode: Literal["first", "timer", "self", "force"]
-    task: str = Field(min_length=1)
+    task: str = Field(min_length=0)
     load: int = Field(ge=1, le=5)
     state: int = Field(ge=1, le=5)
     action: Literal["start", "rest", "skip"]
@@ -35,6 +35,8 @@ class RecordRequest(BaseModel):
                 raise ValueError("snooze_min は 15/30/45/60 のいずれかです")
         if self.action == "start" and self.dialog_mode != "first":
             raise ValueError("action=start は first モードのみ有効です")
+        if self.action == "start" and not self.task:
+            raise ValueError("action=start のとき task は必須です")
         return self
 
 

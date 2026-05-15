@@ -24,6 +24,7 @@ def get_state() -> dict:
         "timer_duration": s.timer_duration,
         "session_elapsed": s.session_elapsed,
         "accum_elapsed": s.accum_elapsed,
+        "break_elapsed": s.break_elapsed,
         "is_running": s.is_running,
         "is_breaking": s.is_breaking,
         "is_first": s.is_first,

@@ -66,6 +66,7 @@
       <button id="btn-reset" class="btn btn-secondary">リセット</button>
       <button id="btn-end" class="btn btn-end">本日の作業終了</button>
       <button id="btn-self" class="btn btn-self">自己申告</button>
+      <button id="btn-report" class="btn btn-secondary">日報を出力</button>
     </div>
 
     <!-- タイマー間隔変更（非表示中 - 復元するにはこのコメントを外す） -->
@@ -91,6 +92,12 @@
       </div>
       <div class="chart-box">
         <h3 class="chart-title">作業・休憩時間</h3>
+        <div class="chart-legend-note">
+          作業の負荷:
+          <span class="legend-chip" style="background:#64b5f6">低(1-2)</span>
+          <span class="legend-chip" style="background:#1976d2">中(3)</span>
+          <span class="legend-chip" style="background:#e53935">高(4-5)</span>
+        </div>
         <canvas id="session-chart"></canvas>
       </div>
     </div>
