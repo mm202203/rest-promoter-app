@@ -4,6 +4,7 @@
 const POLL_INTERVAL_MS = 1000;
 const ACCUM_WARN_MIN = 135;
 const ACCUM_DANGER_MIN = 180;
+const WEEK_WINDOW = 20;
 
 // ── 状態変数 ──────────────────────────────────────────────────
 let isPolling = false;
@@ -16,6 +17,8 @@ let pendingAdvice = null;
 let dialogRoute = null;
 let breakDuration = null;
 let workDuration = null;
+let selectedPeriod = 'today';
+let weekSliderValue = 0;
 
 // ── DOM 参照 ──────────────────────────────────────────────────
 const connectionErrorEl = document.getElementById('connection-error');
@@ -40,14 +43,19 @@ const btnBackEl = document.getElementById('btn-back');
 const btnNextEl = document.getElementById('btn-next');
 const statsWorkEl = document.getElementById('stats-work');
 const statsBreakEl = document.getElementById('stats-break');
-const btnReportEl = document.getElementById('btn-report');
+const btnReportEl = document.getElementById('btn-report-small');
+const weekSliderEl = document.getElementById('week-slider');
+const logHeaderEl = document.getElementById('log-header');
+const logCollapseEl = document.getElementById('log-collapse');
+const logChevronEl = document.getElementById('log-chevron');
 
 // ── Chart.js グラフ ───────────────────────────────────────────
 let stateChart = null;
 let dialogStateChart = null;
 let dialogChartCanvas = null; // DOM から切り離されても参照を保持するため変数で管理
 
-let breakFlagsCache = []; // breakLinePlugin から参照
+let breakFlagsCache = [];
+let sessionMinsCache = [];
 
 const breakLinePlugin = {
   id: 'breakLines',
@@ -89,7 +97,18 @@ function initCharts() {
     },
     options: {
       scales: { y: { min: 1, max: 5, ticks: { stepSize: 1 } } },
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label(ctx) {
+              const y = ctx.parsed.y;
+              const sessionMin = sessionMinsCache[ctx.dataIndex] ?? 0;
+              return `状態: ${y} / 作業時間: ${sessionMin}分`;
+            },
+          },
+        },
+      },
       animation: false,
     },
     plugins: [breakLinePlugin],
@@ -121,25 +140,65 @@ function scoreColor(score) {
   return '#4caf50';
 }
 
+function getPeriodDate(period) {
+  const n = { today: 0, yesterday: 1, dayBefore: 2 }[period] ?? 0;
+  return new Date(Date.now() + (9 - n * 24) * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+function getLast7Dates() {
+  return Array.from({ length: 7 }, (_, i) =>
+    new Date(Date.now() + (9 - i * 24) * 3600 * 1000).toISOString().slice(0, 10)
+  );
+}
+
 function updateCharts(logs) {
-  const today = getTodayJST();
-  const todayLogs = logs.filter(l => l.timestamp && l.timestamp.startsWith(today));
+  if (!stateChart) return;
+  try {
+    const today = getTodayJST();
+    const todayLogs = logs.filter(l => l.timestamp && l.timestamp.startsWith(today));
+    const workLogs = logs.filter(l =>
+      l.timestamp && (l.action === 'rest' || l.action === 'skip')
+    );
 
-  const chartLogs = todayLogs
-    .filter(l => l.action === 'rest' || l.action === 'skip')
-    .slice(-30);
+    let chartLogs;
+    if (selectedPeriod === 'week') {
+      const dates = getLast7Dates();
+      const allWeekLogs = workLogs.filter(l => dates.some(d => l.timestamp.startsWith(d)));
+      const maxSlider = Math.max(0, allWeekLogs.length - WEEK_WINDOW);
+      weekSliderEl.max = maxSlider;
+      weekSliderValue = Math.min(weekSliderValue, maxSlider);
+      weekSliderEl.value = weekSliderValue;
+      if (allWeekLogs.length > WEEK_WINDOW) {
+        weekSliderEl.classList.remove('hidden');
+      } else {
+        weekSliderEl.classList.add('hidden');
+      }
+      chartLogs = allWeekLogs.slice(weekSliderValue, weekSliderValue + WEEK_WINDOW);
+    } else {
+      const targetDate = getPeriodDate(selectedPeriod);
+      chartLogs = workLogs.filter(l => l.timestamp.startsWith(targetDate));
+      weekSliderEl.classList.add('hidden');
+    }
 
-  stateChart.data.labels = chartLogs.map(l => l.timestamp.slice(11, 16));
-  stateChart.data.datasets[0].data = chartLogs.map(l => l.state);
-  stateChart.data.datasets[0].pointBackgroundColor = chartLogs.map(l => loadColor(Number(l.load) || 3));
-  stateChart.data.datasets[0].pointRadius = chartLogs.map(l => {
-    const m = Number(l.session_min) || 0;
-    return 4 + Math.min(m, 60) / 60 * 8;
-  });
-  breakFlagsCache = chartLogs.map(l => l.action === 'rest');
-  stateChart.update();
+    stateChart.data.labels = chartLogs.map(l =>
+      selectedPeriod === 'week'
+        ? l.timestamp.slice(5, 10).replace('-', '/') + ' ' + l.timestamp.slice(11, 16)
+        : l.timestamp.slice(11, 16)
+    );
+    stateChart.data.datasets[0].data = chartLogs.map(l => Number(l.state));
+    sessionMinsCache = chartLogs.map(l => Number(l.session_min) || 0);
+    stateChart.data.datasets[0].pointBackgroundColor = chartLogs.map(l => loadColor(Number(l.load) || 3));
+    stateChart.data.datasets[0].pointRadius = chartLogs.map(l => {
+      const m = Number(l.session_min) || 0;
+      return 4 + Math.min(m, 60) / 60 * 8;
+    });
+    breakFlagsCache = chartLogs.map(l => l.action === 'rest');
+    stateChart.update();
 
-  updateDailyStats(todayLogs);
+    updateDailyStats(todayLogs);
+  } catch (e) {
+    console.error('updateCharts error:', e);
+  }
 }
 
 function updateDailyStats(todayLogs) {
@@ -347,7 +406,7 @@ function renderLogs(logs) {
 
     const action = document.createElement('span');
     action.className = 'log-action';
-    const actionMap = { start: '開始', rest: '休憩', skip: 'スヌーズ' };
+    const actionMap = { start: '開始', rest: '休憩', skip: '継続作業' };
     action.textContent = actionMap[l.action] || l.action;
 
     item.appendChild(ts);
@@ -361,7 +420,7 @@ const logListEl = document.getElementById('log-list');
 
 // ── ダイアログ ────────────────────────────────────────────────
 function getStepCount(mode, route) {
-  if (mode === 'first') return 3;
+  if (mode === 'first') return 4;
   if (mode === 'force') return 2;
   if (route === 'rest') return 3;
   if (route === 'continue') return 5;
@@ -374,7 +433,7 @@ function openDialog(mode) {
   isDialogOpen = true;
   pendingAdvice = null;
   dialogRoute = null;
-  dialogData = { state: null, task: '', load: null, action: null, break_min: null, snooze_min: null };
+  dialogData = { state: null, task: '', load: null, action: null, break_min: null, snooze_min: null, work_min: null };
   dialogBoxEl.classList.remove('state-low');
   dialogOverlayEl.classList.remove('hidden');
   showStep(1);
@@ -413,9 +472,35 @@ function showStep(step) {
 }
 
 function renderFirstStep(step) {
-  if (step === 1) renderTaskInput('今回の作業内容を入力してください');
-  else if (step === 2) renderLoadSelect();
-  else if (step === 3) renderStateSelect();
+  if (step === 1) renderStateSelect();
+  else if (step === 2) renderTaskInput('今回の作業内容を入力してください');
+  else if (step === 3) renderLoadSelect();
+  else if (step === 4) renderWorkDurationSelect();
+}
+
+function renderWorkDurationSelect() {
+  const title = document.createElement('div');
+  title.className = 'step-title';
+  title.textContent = '最初の作業時間を選択してください';
+  stepContentEl.appendChild(title);
+
+  const group = document.createElement('div');
+  group.className = 'radio-group';
+  const defaultMin = lastState ? Math.round(lastState.timer_duration / 60) : 60;
+  for (const min of [15, 30, 45, 60, 75, 90]) {
+    const btn = document.createElement('button');
+    const isDefault = min === defaultMin;
+    btn.className = 'radio-btn' + (isDefault ? ' selected' : '');
+    btn.textContent = `${min}分`;
+    if (isDefault && dialogData.work_min == null) dialogData.work_min = min;
+    btn.addEventListener('click', () => {
+      dialogData.work_min = min;
+      group.querySelectorAll('.radio-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+    group.appendChild(btn);
+  }
+  stepContentEl.appendChild(group);
 }
 
 function renderTimerStep(step, mode) {
@@ -496,15 +581,15 @@ function renderBreakSelect(forceOnly) {
 function renderSnoozeSelect() {
   const title = document.createElement('div');
   title.className = 'step-title';
-  title.textContent = 'スヌーズ時間を選択してください';
+  title.textContent = '継続作業時間を選択してください';
   stepContentEl.appendChild(title);
 
   const group = document.createElement('div');
   group.className = 'radio-group';
-  for (const min of [15, 30, 45, 60]) {
+  for (const min of [15, 30, 45, 60, 75, 90]) {
     const btn = document.createElement('button');
     btn.className = 'radio-btn' + (dialogData.snooze_min === min ? ' selected' : '');
-    btn.textContent = `${min}分後`;
+    btn.textContent = `${min}分`;
     btn.addEventListener('click', () => {
       dialogData.action = 'skip';
       dialogData.snooze_min = min;
@@ -613,7 +698,8 @@ async function onNextClick() {
 
   // バリデーション
   if (mode === 'first') {
-    if (currentStep === 1) {
+    if (currentStep === 1 && dialogData.state == null) return;
+    if (currentStep === 2) {
       const taskEl = document.getElementById('input-task');
       const errEl = document.getElementById('task-error');
       if (!taskEl || !taskEl.value.trim()) {
@@ -622,8 +708,8 @@ async function onNextClick() {
       }
       dialogData.task = taskEl.value.trim();
     }
-    if (currentStep === 2 && dialogData.load == null) return;
-    if (currentStep === 3 && dialogData.state == null) return;
+    if (currentStep === 3 && dialogData.load == null) return;
+    if (currentStep === 4 && dialogData.work_min == null) return;
   } else if (mode === 'force') {
     if (currentStep === 1 && dialogData.state == null) return;
     if (currentStep === 2 && dialogData.break_min == null) return;
@@ -686,6 +772,9 @@ async function submitDialog() {
     snooze_min = dialogData.snooze_min;
   }
 
+  if (mode === 'first' && dialogData.work_min) {
+    await apiFetch('/config', 'POST', { duration_min: dialogData.work_min });
+  }
   const payload = {
     dialog_mode: mode,
     task,
@@ -729,7 +818,8 @@ btnSelfEl.addEventListener('click', () => {
   openDialog('self');
 });
 
-btnReportEl.addEventListener('click', async () => {
+btnReportEl.addEventListener('click', async (e) => {
+  e.stopPropagation();
   try {
     const res = await apiFetch('/report', 'POST');
     const blob = new Blob([res.content], { type: 'text/markdown' });
@@ -737,8 +827,8 @@ btnReportEl.addEventListener('click', async () => {
     a.href = URL.createObjectURL(blob);
     a.download = res.filename;
     a.click();
-  } catch (e) {
-    alert(`日報の出力に失敗しました。サーバーを再起動してから再度お試しください。\n${e}`);
+  } catch (err) {
+    alert(`日報の出力に失敗しました。サーバーを再起動してから再度お試しください。\n${err}`);
   }
 });
 
@@ -748,6 +838,26 @@ document.querySelectorAll('.preset-btn').forEach(btn => {
     await apiFetch('/config', 'POST', { duration_min: min });
     await poll();
   });
+});
+
+document.querySelectorAll('.period-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    selectedPeriod = btn.dataset.period;
+    if (selectedPeriod === 'week') weekSliderValue = Number.MAX_SAFE_INTEGER;
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateCharts(lastLogsCache);
+  });
+});
+
+weekSliderEl.addEventListener('input', () => {
+  weekSliderValue = Number(weekSliderEl.value);
+  updateCharts(lastLogsCache);
+});
+
+logHeaderEl.addEventListener('click', () => {
+  const isOpen = logCollapseEl.classList.toggle('open');
+  logChevronEl.classList.toggle('open', isOpen);
 });
 
 btnNextEl.addEventListener('click', onNextClick);

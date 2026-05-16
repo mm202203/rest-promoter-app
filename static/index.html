@@ -62,11 +62,10 @@
     <!-- 操作ボタン -->
     <div class="button-group">
       <button id="btn-start" class="btn btn-primary">開始</button>
-      <button id="btn-pause" class="btn btn-secondary">停止</button>
-      <button id="btn-reset" class="btn btn-secondary">リセット</button>
-      <button id="btn-end" class="btn btn-end">本日の作業終了</button>
-      <button id="btn-self" class="btn btn-self">自己申告</button>
-      <button id="btn-report" class="btn btn-secondary">日報を出力</button>
+      <button id="btn-pause" class="btn btn-secondary" style="display:none">停止</button>
+      <button id="btn-reset" class="btn btn-secondary" style="display:none">リセット</button>
+      <button id="btn-self" class="btn btn-self tooltip-btn" data-tooltip="今の状態を記録して次のアクションを決めます">立ち止まる</button>
+      <button id="btn-end" class="btn btn-end">終了</button>
     </div>
 
     <!-- タイマー間隔変更（非表示中 - 復元するにはこのコメントを外す） -->
@@ -87,7 +86,15 @@
     <!-- グラフ -->
     <div class="charts-section">
       <div class="chart-box">
-        <h3 class="chart-title">状態スコア推移</h3>
+        <div class="chart-title-row">
+          <h3 class="chart-title">状態スコア推移</h3>
+          <div class="period-btn-group">
+            <button class="period-btn active" data-period="today">今日</button>
+            <button class="period-btn" data-period="yesterday">前日</button>
+            <button class="period-btn" data-period="dayBefore">前々日</button>
+            <button class="period-btn" data-period="week">直近7日</button>
+          </div>
+        </div>
         <div class="chart-legend-note">
           作業負荷:
           <span class="legend-chip" style="background:#4A90D9">低(1-2)</span>
@@ -97,13 +104,22 @@
         </div>
         <div class="chart-legend-note">点の大きさ＝作業時間（最大60分）</div>
         <canvas id="state-chart"></canvas>
+        <input type="range" id="week-slider" class="week-slider hidden" min="0" max="0" step="1" value="0">
       </div>
     </div>
 
     <!-- ログ一覧 -->
     <div class="log-section">
-      <h3 class="log-title">最近の記録</h3>
-      <div id="log-list" class="log-list"></div>
+      <div class="log-header" id="log-header">
+        <h3 class="log-title">最近の記録</h3>
+        <div class="log-header-actions">
+          <button id="btn-report-small" class="btn-report-small">日報を出力</button>
+          <span class="log-chevron" id="log-chevron">▼</span>
+        </div>
+      </div>
+      <div class="log-collapse" id="log-collapse">
+        <div id="log-list" class="log-list"></div>
+      </div>
     </div>
   </div>
 
@@ -122,6 +138,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=20260516c"></script>
 </body>
 </html>

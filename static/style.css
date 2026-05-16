@@ -210,6 +210,34 @@ body {
   background: #6a1b9a;
 }
 
+/* ツールチップ */
+.tooltip-btn {
+  position: relative;
+}
+
+.tooltip-btn::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 400;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 100;
+}
+
+.tooltip-btn:hover::after {
+  opacity: 1;
+}
+
 /* タイマー間隔変更 */
 .config-section {
   display: flex;
@@ -273,11 +301,55 @@ body {
   padding: 16px;
 }
 
+.chart-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
 .chart-title {
   font-size: 13px;
   font-weight: 600;
   color: var(--color-text-sub);
-  margin-bottom: 8px;
+  margin-bottom: 0;
+}
+
+.period-btn-group {
+  display: flex;
+  background: #ebebeb;
+  border-radius: 20px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.period-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border: none;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--color-text-sub);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+
+.period-btn:hover {
+  color: var(--color-text);
+}
+
+.period-btn.active {
+  background: #fff;
+  color: var(--color-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.week-slider {
+  width: 100%;
+  margin-top: 8px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
 }
 
 .chart-legend-note {
@@ -314,11 +386,61 @@ body {
   padding: 16px;
 }
 
+.log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.log-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.log-chevron {
+  font-size: 11px;
+  color: var(--color-text-sub);
+  transition: transform 0.2s;
+}
+
+.log-chevron.open {
+  transform: rotate(180deg);
+}
+
+.log-collapse {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.3s ease;
+}
+
+.log-collapse.open {
+  max-height: 600px;
+}
+
+.btn-report-small {
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-text-sub);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-report-small:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
 .log-title {
   font-size: 13px;
   font-weight: 600;
   color: var(--color-text-sub);
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 
 .log-list {

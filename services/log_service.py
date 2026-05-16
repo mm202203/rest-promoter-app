@@ -176,7 +176,7 @@ def generate_daily_report(current_session_sec: int = 0) -> tuple[str, str]:
                 )
                 load = int(row["load"]) if pd.notna(row.get("load")) else "-"
                 state = int(row["state"]) if pd.notna(row.get("state")) else "-"
-                suffix = "（スヌーズ継続）" if action == "skip" else ""
+                suffix = "（継続作業）" if action == "skip" else ""
                 work_entries.append(
                     f"- {time_str} {task}"
                     f"（負荷:{load} / 状態:{state}）→ {work_time_min}分{suffix}"
