@@ -2,9 +2,7 @@
 
 // ── 定数 ──────────────────────────────────────────────────────
 const POLL_INTERVAL_MS = 1000;
-const ACCUM_WARN_MIN = 135;
 const ACCUM_DANGER_MIN = 180;
-const WEEK_WINDOW = 20;
 
 // ── 状態変数 ──────────────────────────────────────────────────
 let isPolling = false;
@@ -54,26 +52,34 @@ let stateChart = null;
 let dialogStateChart = null;
 let dialogChartCanvas = null; // DOM から切り離されても参照を保持するため変数で管理
 
-let breakFlagsCache = [];
+const WEEK_TIME_WINDOW_MIN = 480;
+
+let bandDataCache = [];
 let sessionMinsCache = [];
 
-const breakLinePlugin = {
-  id: 'breakLines',
-  beforeDatasetsDraw(chart) {
-    const { ctx, scales } = chart;
-    breakFlagsCache.forEach((isBreak, i) => {
-      if (!isBreak) return;
-      const meta = chart.getDatasetMeta(0);
-      if (!meta.data[i]) return;
-      const x = meta.data[i].x;
+const backgroundBandPlugin = {
+  id: 'backgroundBands',
+  beforeDraw(chart) {
+    const { ctx, chartArea, scales } = chart;
+    if (!chartArea) return;
+    const xScale = scales.x;
+    bandDataCache.forEach(({ start, end, type, load }) => {
+      const xStart = xScale.getPixelForValue(start.getTime());
+      const xEnd   = xScale.getPixelForValue(end.getTime());
+      if (xStart >= chartArea.right || xEnd <= chartArea.left) return;
+      const x1 = Math.max(xStart, chartArea.left);
+      const x2 = Math.min(xEnd, chartArea.right);
+      let color;
+      if (type === 'rest') {
+        color = 'rgba(59, 109, 17, 0.3)';
+      } else {
+        if (load >= 4)       color = 'rgba(216, 90, 48, 0.50)';
+        else if (load === 3) color = 'rgba(216, 90, 48, 0.30)';
+        else                 color = 'rgba(216, 90, 48, 0.15)';
+      }
       ctx.save();
-      ctx.beginPath();
-      ctx.setLineDash([5, 5]);
-      ctx.strokeStyle = 'rgba(59, 109, 17, 0.5)';
-      ctx.lineWidth = 2;
-      ctx.moveTo(x, scales.y.top);
-      ctx.lineTo(x, scales.y.bottom);
-      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.fillRect(x1, chartArea.top, x2 - x1, chartArea.bottom - chartArea.top);
       ctx.restore();
     });
   },
@@ -84,43 +90,70 @@ function initCharts() {
   stateChart = new Chart(stateCtx, {
     type: 'line',
     data: {
-      labels: [],
       datasets: [{
         label: '状態スコア',
         data: [],
-        pointBackgroundColor: [],
+        pointBackgroundColor: '#185FA5',
         pointRadius: [],
-        borderColor: '#d0d0d0',
+        borderColor: '#185FA5',
         tension: 0.3,
         fill: false,
+        spanGaps: false,
       }],
     },
     options: {
-      scales: { y: { min: 1, max: 5, ticks: { stepSize: 1 } } },
+      scales: {
+        x: {
+          type: 'time',
+          time: { displayFormats: { minute: 'HH:mm', hour: 'HH:mm' } },
+        },
+        y: { min: 1, max: 5, ticks: { stepSize: 1 } },
+      },
       plugins: {
         legend: { display: false },
         tooltip: {
+          filter: (item) => item.raw !== null && !item.raw?._ghost,
           callbacks: {
-            label(ctx) {
-              const y = ctx.parsed.y;
-              const sessionMin = sessionMinsCache[ctx.dataIndex] ?? 0;
-              return `状態: ${y} / 作業時間: ${sessionMin}分`;
+            title: (items) => {
+              const raw = items[0].raw;
+              return selectedPeriod === 'week'
+                ? String(raw.x).slice(5, 10).replace('-', '/') + ' ' + String(raw.x).slice(11, 16)
+                : String(raw.x).slice(11, 16);
+            },
+            label: (ctx) => {
+              const sessionMin = sessionMinsCache[ctx.dataIndex];
+              return sessionMin != null ? `状態: ${ctx.raw.y} / 作業時間: ${sessionMin}分` : null;
             },
           },
         },
       },
       animation: false,
     },
-    plugins: [breakLinePlugin],
+    plugins: [backgroundBandPlugin],
   });
 
   dialogChartCanvas = document.getElementById('dialog-state-chart');
   if (dialogChartCanvas) {
     dialogStateChart = new Chart(dialogChartCanvas.getContext('2d'), {
       type: 'line',
-      data: { labels: [], datasets: [{ label: '状態スコア', data: [], pointBackgroundColor: [], borderColor: '#9e9e9e', tension: 0.3, fill: false }] },
+      data: {
+        datasets: [{
+          label: '状態スコア',
+          data: [],
+          pointBackgroundColor: [],
+          borderColor: '#185FA5',
+          tension: 0.3,
+          fill: false,
+        }],
+      },
       options: {
-        scales: { y: { min: 1, max: 5, ticks: { stepSize: 1 } } },
+        scales: {
+          x: {
+            type: 'time',
+            time: { displayFormats: { minute: 'HH:mm', hour: 'HH:mm' } },
+          },
+          y: { min: 1, max: 5, ticks: { stepSize: 1 } },
+        },
         plugins: { legend: { display: false } },
         animation: false,
       },
@@ -135,9 +168,9 @@ function loadColor(load) {
 }
 
 function scoreColor(score) {
-  if (score <= 2) return '#f44336';
-  if (score === 3) return '#9e9e9e';
-  return '#4caf50';
+  if (score <= 2) return '#D85A30';
+  if (score === 3) return '#888780';
+  return '#185FA5';
 }
 
 function getPeriodDate(period) {
@@ -151,48 +184,136 @@ function getLast7Dates() {
   );
 }
 
+function buildBandData(logs) {
+  bandDataCache = [];
+  for (let i = 0; i < logs.length; i++) {
+    const log = logs[i];
+    if (!log.session_start) continue;
+    if (log.action === 'rest' || log.action === 'skip') {
+      bandDataCache.push({
+        start: new Date(log.session_start),
+        end:   new Date(log.timestamp),
+        type:  'work',
+        load:  Number(log.load) || 3,
+      });
+    }
+    if (log.action === 'rest') {
+      const restStart = new Date(log.timestamp);
+      // 次の session_start まで緑帯を延長（ダイアログ操作の余白も休憩として扱う）
+      const nextWithSession = logs.slice(i + 1).find(l => l.session_start);
+      const restEnd = nextWithSession
+        ? new Date(nextWithSession.session_start)
+        : new Date(restStart.getTime() + Number(log.break_min || 0) * 60000);
+      bandDataCache.push({ start: restStart, end: restEnd, type: 'rest', load: null });
+    }
+  }
+}
+
+// skip ログから chart.js dataset.data と sessionMinsCache を構築する
+// - 日付をまたぐ場合は null でラインをブレーク
+// - 各日の末尾 skip の後に snooze_min 分のゴーストポイントを追加（線の延長）
+function buildDatasetPoints(skipLogs) {
+  const data = [];
+  const mins = [];
+
+  for (let i = 0; i < skipLogs.length; i++) {
+    const log     = skipLogs[i];
+    const prevLog = skipLogs[i - 1];
+    const nextLog = skipLogs[i + 1];
+
+    if (prevLog && prevLog.timestamp.slice(0, 10) !== log.timestamp.slice(0, 10)) {
+      data.push(null);
+      mins.push(null);
+    }
+
+    data.push({ x: log.timestamp, y: Number(log.state) });
+    mins.push(Number(log.session_min) || 0);
+
+    const isDayEnd = !nextLog || nextLog.timestamp.slice(0, 10) !== log.timestamp.slice(0, 10);
+    if (isDayEnd && log.snooze_min) {
+      const ghostMs = new Date(log.timestamp).getTime() + Number(log.snooze_min) * 60000;
+      data.push({ x: new Date(ghostMs).toISOString(), y: Number(log.state), _ghost: true });
+      mins.push(null);
+    }
+  }
+
+  return { data, mins };
+}
+
 function updateCharts(logs) {
   if (!stateChart) return;
   try {
     const today = getTodayJST();
     const todayLogs = logs.filter(l => l.timestamp && l.timestamp.startsWith(today));
-    const workLogs = logs.filter(l =>
-      l.timestamp && (l.action === 'rest' || l.action === 'skip')
-    );
 
-    let chartLogs;
+    let skipLogs, allPeriodLogs, xMin, xMax;
+
     if (selectedPeriod === 'week') {
       const dates = getLast7Dates();
-      const allWeekLogs = workLogs.filter(l => dates.some(d => l.timestamp.startsWith(d)));
-      const maxSlider = Math.max(0, allWeekLogs.length - WEEK_WINDOW);
-      weekSliderEl.max = maxSlider;
-      weekSliderValue = Math.min(weekSliderValue, maxSlider);
-      weekSliderEl.value = weekSliderValue;
-      if (allWeekLogs.length > WEEK_WINDOW) {
-        weekSliderEl.classList.remove('hidden');
+      allPeriodLogs = logs.filter(l => l.timestamp && dates.some(d => l.timestamp.startsWith(d)));
+      const allSkipLogs = allPeriodLogs.filter(l => l.action === 'skip');
+
+      if (allPeriodLogs.length > 0) {
+        const weekStartMs = new Date(allPeriodLogs[0].timestamp).getTime();
+        const weekEndMs   = new Date(allPeriodLogs[allPeriodLogs.length - 1].timestamp).getTime();
+        const totalMin    = (weekEndMs - weekStartMs) / 60000;
+        const maxOffset   = Math.max(0, Math.ceil(totalMin - WEEK_TIME_WINDOW_MIN));
+        weekSliderEl.max  = maxOffset;
+        weekSliderEl.step = 30;
+        weekSliderValue   = Math.min(weekSliderValue, maxOffset);
+        weekSliderEl.value = weekSliderValue;
+        weekSliderEl.classList.toggle('hidden', maxOffset === 0);
+
+        const winStartMs = weekStartMs + weekSliderValue * 60000;
+        const winEndMs   = winStartMs + WEEK_TIME_WINDOW_MIN * 60000;
+        xMin = winStartMs;
+        xMax = winEndMs;
+        // ms で比較（文字列比較はJST/UTCのズレが生じるため）
+        skipLogs = allSkipLogs.filter(l => {
+          const ts = new Date(l.timestamp).getTime();
+          return ts >= winStartMs && ts <= winEndMs;
+        });
       } else {
         weekSliderEl.classList.add('hidden');
+        skipLogs = [];
+        xMin = undefined;
+        xMax = undefined;
       }
-      chartLogs = allWeekLogs.slice(weekSliderValue, weekSliderValue + WEEK_WINDOW);
+
+      stateChart.options.scales.x.time.unit = 'hour';
+      stateChart.options.scales.x.time.displayFormats = { minute: 'MM/dd HH:mm', hour: 'MM/dd HH:mm' };
     } else {
       const targetDate = getPeriodDate(selectedPeriod);
-      chartLogs = workLogs.filter(l => l.timestamp.startsWith(targetDate));
+      allPeriodLogs = logs.filter(l => l.timestamp && l.timestamp.startsWith(targetDate));
+      skipLogs = allPeriodLogs.filter(l => l.action === 'skip');
       weekSliderEl.classList.add('hidden');
+
+      if (skipLogs.length === 0) {
+        xMin = undefined;
+        xMax = undefined;
+      } else {
+        const firstMs = new Date(skipLogs[0].timestamp).getTime();
+        const lastLog = skipLogs[skipLogs.length - 1];
+        const lastMs  = new Date(lastLog.timestamp).getTime();
+        // ゴーストポイント分まで X 軸を広げる
+        const ghostMs = lastLog.snooze_min ? lastMs + Number(lastLog.snooze_min) * 60000 : lastMs;
+        xMin = skipLogs.length === 1 ? firstMs - 30 * 60000 : firstMs;
+        xMax = skipLogs.length === 1 ? firstMs + 30 * 60000 : ghostMs;
+      }
+
+      stateChart.options.scales.x.time.unit = 'minute';
+      stateChart.options.scales.x.time.displayFormats = { minute: 'HH:mm', hour: 'HH:mm' };
     }
 
-    stateChart.data.labels = chartLogs.map(l =>
-      selectedPeriod === 'week'
-        ? l.timestamp.slice(5, 10).replace('-', '/') + ' ' + l.timestamp.slice(11, 16)
-        : l.timestamp.slice(11, 16)
-    );
-    stateChart.data.datasets[0].data = chartLogs.map(l => Number(l.state));
-    sessionMinsCache = chartLogs.map(l => Number(l.session_min) || 0);
-    stateChart.data.datasets[0].pointBackgroundColor = chartLogs.map(l => loadColor(Number(l.load) || 3));
-    stateChart.data.datasets[0].pointRadius = chartLogs.map(l => {
-      const m = Number(l.session_min) || 0;
-      return 4 + Math.min(m, 60) / 60 * 8;
-    });
-    breakFlagsCache = chartLogs.map(l => l.action === 'rest');
+    stateChart.options.scales.x.min = xMin;
+    stateChart.options.scales.x.max = xMax;
+
+    buildBandData(allPeriodLogs);
+
+    const { data: dsData, mins: dsMins } = buildDatasetPoints(skipLogs);
+    sessionMinsCache = dsMins;
+    stateChart.data.datasets[0].data = dsData;
+    stateChart.data.datasets[0].pointRadius = dsData.map(p => (p && !p._ghost) ? 5 : 0);
     stateChart.update();
 
     updateDailyStats(todayLogs);
@@ -212,21 +333,44 @@ function updateDailyStats(todayLogs) {
   const completedRestLogs = (lastState && lastState.is_breaking)
     ? restLogs.slice(0, -1)
     : restLogs;
-  const completedBreakMin = completedRestLogs.reduce((sum, l) => sum + (Number(l.break_min) || 0), 0);
+  // 実際の休憩時間 = rest.timestamp から次の session_start まで（ダイアログ操作時間を含む）
+  const completedBreakMin = completedRestLogs.reduce((sum, restLog) => {
+    const nextWithSession = todayLogs.find(l => l.timestamp > restLog.timestamp && l.session_start);
+    if (nextWithSession) {
+      return sum + (new Date(nextWithSession.session_start).getTime() - new Date(restLog.timestamp).getTime()) / 60000;
+    }
+    return sum + (Number(restLog.break_min) || 0);
+  }, 0);
   const currentBreakMin = lastState ? Math.floor((lastState.break_elapsed || 0) / 60) : 0;
-  statsBreakEl.textContent = `${completedBreakMin + currentBreakMin}分`;
+  statsBreakEl.textContent = `${Math.round(completedBreakMin + currentBreakMin)}分`;
 }
 
 function updateDialogChart(logs, previewScore) {
   if (!dialogStateChart) return;
   const today = getTodayJST();
-  const base = logs.filter(l => l.timestamp && l.timestamp.startsWith(today)).slice(-29);
-  const allPoints = previewScore != null
-    ? [...base, { timestamp: '今回', state: previewScore }]
-    : base.slice(-30);
-  dialogStateChart.data.labels = allPoints.map((l, i) => i === allPoints.length - 1 && previewScore != null ? '今回' : l.timestamp.slice(11, 16));
-  dialogStateChart.data.datasets[0].data = allPoints.map(l => l.state);
-  dialogStateChart.data.datasets[0].pointBackgroundColor = allPoints.map(l => scoreColor(l.state));
+  const skipLogs = logs.filter(l => l.timestamp && l.timestamp.startsWith(today) && l.action === 'skip');
+  const prevLoad = lastState ? lastState.prev_load : 3;
+
+  const points = previewScore != null
+    ? [...skipLogs, { timestamp: new Date().toISOString(), state: previewScore, load: prevLoad, _preview: true }]
+    : skipLogs;
+
+  let xMin, xMax;
+  if (points.length === 0) {
+    xMin = undefined;
+    xMax = undefined;
+  } else if (points.length === 1) {
+    xMin = new Date(new Date(points[0].timestamp).getTime() - 30 * 60000).toISOString();
+    xMax = new Date(new Date(points[0].timestamp).getTime() + 30 * 60000).toISOString();
+  } else {
+    xMin = points[0].timestamp;
+    xMax = points[points.length - 1].timestamp;
+  }
+
+  dialogStateChart.options.scales.x.min = xMin;
+  dialogStateChart.options.scales.x.max = xMax;
+  dialogStateChart.data.datasets[0].data = points.map(l => ({ x: l.timestamp, y: Number(l.state) }));
+  dialogStateChart.data.datasets[0].pointBackgroundColor = points.map(l => loadColor(Number(l.load) || prevLoad));
   dialogStateChart.update();
 }
 
@@ -292,12 +436,12 @@ function updateTimerSvg(state, prevState) {
   const offset = CIRCUMFERENCE * (1 - ratio);
 
   timerProgressEl.setAttribute('stroke-dashoffset', offset.toFixed(2));
-  timerProgressEl.setAttribute('stroke', state.is_breaking ? '#4caf50' : '#1976d2');
+  timerProgressEl.setAttribute('stroke', state.is_breaking ? '#3B6D11' : '#185FA5');
 
   if (state.is_breaking) {
     timerTextEl.textContent = formatMmss(state.remaining);
     timerTextEl.setAttribute('font-size', '24');
-    timerTextEl.setAttribute('fill', '#4caf50');
+    timerTextEl.setAttribute('fill', '#3B6D11');
     timerLabelEl.setAttribute('visibility', 'visible');
   } else {
     timerTextEl.textContent = formatMmss(state.remaining);
@@ -314,13 +458,12 @@ function updateAccumBar(state) {
   const pct = Math.min((mins / ACCUM_DANGER_MIN) * 100, 100);
   accumBarEl.style.width = `${pct}%`;
   accumTextEl.textContent = `${mins}分 / ${ACCUM_DANGER_MIN}分`;
-  accumBarEl.classList.remove('accum-warn', 'accum-danger');
+  accumBarEl.classList.remove('accum-danger');
   if (mins >= ACCUM_DANGER_MIN) {
     accumBarEl.classList.add('accum-danger');
     dangerWarningEl.classList.remove('hidden');
   } else {
     dangerWarningEl.classList.add('hidden');
-    if (mins >= ACCUM_WARN_MIN) accumBarEl.classList.add('accum-warn');
   }
 }
 
