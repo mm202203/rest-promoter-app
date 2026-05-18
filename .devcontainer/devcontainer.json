@@ -8,6 +8,7 @@
     },
     "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
   },
+  "runArgs": ["--env", "WAYLAND_DISPLAY="],  
   "postCreateCommand": "pip install uv && uv sync",
   "forwardPorts": [8000],
   "portsAttributes": {

@@ -209,17 +209,24 @@ function buildBandData(logs) {
   }
 }
 
-// skip ログから chart.js dataset.data と sessionMinsCache を構築する
+// skip / rest / first ログから chart.js dataset.data と sessionMinsCache を構築する
 // - 日付をまたぐ場合は null でラインをブレーク
 // - 各日の末尾 skip の後に snooze_min 分のゴーストポイントを追加（線の延長）
-function buildDatasetPoints(skipLogs) {
+function buildDatasetPoints(displayLogs) {
   const data = [];
   const mins = [];
 
-  for (let i = 0; i < skipLogs.length; i++) {
-    const log     = skipLogs[i];
-    const prevLog = skipLogs[i - 1];
-    const nextLog = skipLogs[i + 1];
+  // ゴーストポイント用に各日付の最後の skip タイムスタンプを記録
+  const lastSkipTsByDate = {};
+  for (const log of displayLogs) {
+    if (log.action === 'skip') {
+      lastSkipTsByDate[log.timestamp.slice(0, 10)] = log.timestamp;
+    }
+  }
+
+  for (let i = 0; i < displayLogs.length; i++) {
+    const log     = displayLogs[i];
+    const prevLog = displayLogs[i - 1];
 
     if (prevLog && prevLog.timestamp.slice(0, 10) !== log.timestamp.slice(0, 10)) {
       data.push(null);
@@ -229,8 +236,8 @@ function buildDatasetPoints(skipLogs) {
     data.push({ x: log.timestamp, y: Number(log.state) });
     mins.push(Number(log.session_min) || 0);
 
-    const isDayEnd = !nextLog || nextLog.timestamp.slice(0, 10) !== log.timestamp.slice(0, 10);
-    if (isDayEnd && log.snooze_min) {
+    const isLastSkipOfDay = log.action === 'skip' && lastSkipTsByDate[log.timestamp.slice(0, 10)] === log.timestamp;
+    if (isLastSkipOfDay && log.snooze_min) {
       const ghostMs = new Date(log.timestamp).getTime() + Number(log.snooze_min) * 60000;
       data.push({ x: new Date(ghostMs).toISOString(), y: Number(log.state), _ghost: true });
       mins.push(null);
@@ -246,12 +253,17 @@ function updateCharts(logs) {
     const today = getTodayJST();
     const todayLogs = logs.filter(l => l.timestamp && l.timestamp.startsWith(today));
 
-    let skipLogs, allPeriodLogs, xMin, xMax;
+    let skipLogs, displayLogs, allPeriodLogs, xMin, xMax;
 
     if (selectedPeriod === 'week') {
       const dates = getLast7Dates();
       allPeriodLogs = logs.filter(l => l.timestamp && dates.some(d => l.timestamp.startsWith(d)));
       const allSkipLogs = allPeriodLogs.filter(l => l.action === 'skip');
+      const allDisplayLogs = allPeriodLogs.filter(l =>
+        l.action === 'skip' ||
+        l.action === 'rest' ||
+        (l.action === 'start' && l.dialog_mode === 'first')
+      );
 
       if (allPeriodLogs.length > 0) {
         const weekStartMs = new Date(allPeriodLogs[0].timestamp).getTime();
@@ -273,9 +285,14 @@ function updateCharts(logs) {
           const ts = new Date(l.timestamp).getTime();
           return ts >= winStartMs && ts <= winEndMs;
         });
+        displayLogs = allDisplayLogs.filter(l => {
+          const ts = new Date(l.timestamp).getTime();
+          return ts >= winStartMs && ts <= winEndMs;
+        });
       } else {
         weekSliderEl.classList.add('hidden');
         skipLogs = [];
+        displayLogs = [];
         xMin = undefined;
         xMax = undefined;
       }
@@ -286,11 +303,21 @@ function updateCharts(logs) {
       const targetDate = getPeriodDate(selectedPeriod);
       allPeriodLogs = logs.filter(l => l.timestamp && l.timestamp.startsWith(targetDate));
       skipLogs = allPeriodLogs.filter(l => l.action === 'skip');
+      displayLogs = allPeriodLogs.filter(l =>
+        l.action === 'skip' ||
+        l.action === 'rest' ||
+        (l.action === 'start' && l.dialog_mode === 'first')
+      );
       weekSliderEl.classList.add('hidden');
 
-      if (skipLogs.length === 0) {
+      if (displayLogs.length === 0) {
         xMin = undefined;
         xMax = undefined;
+      } else if (skipLogs.length === 0) {
+        // first / rest のみ → 最初の点を中心に ±30分
+        const firstMs = new Date(displayLogs[0].timestamp).getTime();
+        xMin = firstMs - 30 * 60000;
+        xMax = firstMs + 30 * 60000;
       } else {
         const firstMs = new Date(skipLogs[0].timestamp).getTime();
         const lastLog = skipLogs[skipLogs.length - 1];
@@ -310,7 +337,7 @@ function updateCharts(logs) {
 
     buildBandData(allPeriodLogs);
 
-    const { data: dsData, mins: dsMins } = buildDatasetPoints(skipLogs);
+    const { data: dsData, mins: dsMins } = buildDatasetPoints(displayLogs);
     sessionMinsCache = dsMins;
     stateChart.data.datasets[0].data = dsData;
     stateChart.data.datasets[0].pointRadius = dsData.map(p => (p && !p._ghost) ? 5 : 0);
