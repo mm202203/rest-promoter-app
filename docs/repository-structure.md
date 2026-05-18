@@ -57,7 +57,7 @@ rest-promoter-app/
 | ファイル | 役割 |
 |---------|------|
 | `CLAUDE.md` | Claude Code 向けのプロジェクト開発ルール定義。開発プロセス・ドキュメント管理方針を記載 |
-| `main.py` | FastAPI インスタンスの生成、ルーター登録、`StaticFiles` マウント、バックグラウンドスレッド起動（lifespan）、`data/log.csv` の初回自動生成 |
+| `main.py` | FastAPI インスタンスの生成、ルーター登録、`StaticFiles` マウント、バックグラウンドスレッド起動（lifespan）、`data/log.csv` の初回自動生成、起動時の CSV からの前回状態復元 |
 | `pyproject.toml` | uv によるパッケージ管理。依存パッケージ（fastapi / uvicorn / pandas）と Python バージョン要件を定義 |
 | `uv.lock` | uv が自動生成するロックファイル。依存パッケージのバージョンを固定し、再現性のある環境を保証する。コミット対象 |
 | `start.bat` | アプリの起動スクリプト。uvicorn を起動しブラウザを自動オープンする |
@@ -88,7 +88,7 @@ rest-promoter-app/
 |---------|------|
 | `index.html` | メイン画面のHTML。Chart.js の CDN 読み込みタグを含む |
 | `style.css` | 全スタイル定義。CSS カスタムプロパティで色・サイズを管理 |
-| `app.js` | ポーリング（`setInterval` 1秒）、ダイアログの表示・ステップ制御、グラフ描画（Chart.js）、ユーザー入力のクライアント側バリデーション、`self` モードダイアログの直接起動 |
+| `app.js` | ポーリング（`setInterval` 1秒）、ダイアログの表示・ステップ制御、グラフ描画（Chart.js）、ユーザー入力のクライアント側バリデーション、`self` モードダイアログの直接起動、音声通知（Web Speech API）、日報ダウンロード |
 
 **配置ルール:**
 - フレームワークのビルド成果物は置かない（バンドラー不使用）
@@ -104,8 +104,8 @@ FastAPI のルーター定義を置く。エンドポイントのルーティン
 | ファイル | 担当エンドポイント | Pydantic モデル例 |
 |---------|-----------------|-----------------|
 | `timer.py` | `GET /state` `POST /start` `POST /pause` `POST /reset` `POST /config` | `ConfigRequest`, `StateResponse` |
-| `dialog.py` | `POST /record` `POST /dialog/ack` | `RecordRequest`, `RecordResponse` |
-| `log.py` | `GET /logs` | `LogEntry`, `LogsResponse` |
+| `dialog.py` | `POST /record` `POST /dialog/ack` `POST /advice` | `RecordRequest`, `RecordResponse`, `AdviceRequest` |
+| `log.py` | `GET /logs` `POST /report` | `LogEntry`, `LogsResponse` |
 
 **配置ルール:**
 - 1ファイルにつき1つの関心領域（タイマー操作 / ダイアログ / ログ）に対応させる
@@ -123,7 +123,7 @@ FastAPI のルーター定義を置く。エンドポイントのルーティン
 |---------|------|
 | `timer_service.py` | `TimerState` クラスのシングルトンインスタンス管理、`threading.Lock` による排他制御、バックグラウンドスレッド（1秒ごとの状態更新・タイマー発火判定）、タイマー操作メソッド（start / pause / reset / config） |
 | `session_service.py` | ダイアログモードの判定ロジック（`first` / `timer` / `force`）、アドバイス分岐ロジック（状態スコア・負荷・`session_elapsed` の条件評価）。`TimerState` の値を受け取って結果を返す副作用のない純粋関数として実装する |
-| `log_service.py` | `data/log.csv` への追記・全件読み込み（pandas 使用）、CSV インジェクション対策（先頭文字エスケープ）、初回起動時の CSV 自動生成 |
+| `log_service.py` | `data/log.csv` への追記・全件読み込み（pandas 使用）、CSV インジェクション対策（先頭文字エスケープ）、初回起動時の CSV 自動生成、日報生成（`generate_daily_report`）、再起動時の状態復元用ログ参照 |
 
 **サービス間の依存関係:**
 
