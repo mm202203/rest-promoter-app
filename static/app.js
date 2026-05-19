@@ -306,7 +306,9 @@ function updateCharts(logs) {
       displayLogs = allPeriodLogs.filter(l =>
         l.action === 'skip' ||
         l.action === 'rest' ||
-        (l.action === 'start' && l.dialog_mode === 'first')
+        // TODO: start で最初の状態スコアを記録するようにすれば dialog_mode 条件は不要になるかも
+        (l.action === 'start' && l.dialog_mode === 'first')  // 修正前
+        // l.action === 'start'  // 修正後
       );
       weekSliderEl.classList.add('hidden');
 
@@ -319,12 +321,13 @@ function updateCharts(logs) {
         xMin = firstMs - 30 * 60000;
         xMax = firstMs + 30 * 60000;
       } else {
-        const firstMs = new Date(skipLogs[0].timestamp).getTime();
+        // first点を表示する
+        const firstMs = new Date(displayLogs[0].timestamp).getTime();
         const lastLog = skipLogs[skipLogs.length - 1];
         const lastMs = new Date(lastLog.timestamp).getTime();
         // ゴーストポイント分まで X 軸を広げる
         const ghostMs = lastLog.snooze_min ? lastMs + Number(lastLog.snooze_min) * 60000 : lastMs;
-        xMin = skipLogs.length === 1 ? firstMs - 30 * 60000 : firstMs;
+        xMin = firstMs - 30 * 60000;  // 修正後：常に最初の点を左に30分広げる
         xMax = skipLogs.length === 1 ? firstMs + 30 * 60000 : ghostMs;
       }
 
