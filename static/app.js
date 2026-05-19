@@ -65,7 +65,7 @@ const backgroundBandPlugin = {
     const xScale = scales.x;
     bandDataCache.forEach(({ start, end, type, load }) => {
       const xStart = xScale.getPixelForValue(start.getTime());
-      const xEnd   = xScale.getPixelForValue(end.getTime());
+      const xEnd = xScale.getPixelForValue(end.getTime());
       if (xStart >= chartArea.right || xEnd <= chartArea.left) return;
       const x1 = Math.max(xStart, chartArea.left);
       const x2 = Math.min(xEnd, chartArea.right);
@@ -73,9 +73,9 @@ const backgroundBandPlugin = {
       if (type === 'rest') {
         color = 'rgba(59, 109, 17, 0.3)';
       } else {
-        if (load >= 4)       color = 'rgba(216, 90, 48, 0.50)';
+        if (load >= 4) color = 'rgba(216, 90, 48, 0.50)';
         else if (load === 3) color = 'rgba(216, 90, 48, 0.30)';
-        else                 color = 'rgba(216, 90, 48, 0.15)';
+        else color = 'rgba(216, 90, 48, 0.15)';
       }
       ctx.save();
       ctx.fillStyle = color;
@@ -192,9 +192,9 @@ function buildBandData(logs) {
     if (log.action === 'rest' || log.action === 'skip') {
       bandDataCache.push({
         start: new Date(log.session_start),
-        end:   new Date(log.timestamp),
-        type:  'work',
-        load:  Number(log.load) || 3,
+        end: new Date(log.timestamp),
+        type: 'work',
+        load: Number(log.load) || 3,
       });
     }
     if (log.action === 'rest') {
@@ -225,7 +225,7 @@ function buildDatasetPoints(displayLogs) {
   }
 
   for (let i = 0; i < displayLogs.length; i++) {
-    const log     = displayLogs[i];
+    const log = displayLogs[i];
     const prevLog = displayLogs[i - 1];
 
     if (prevLog && prevLog.timestamp.slice(0, 10) !== log.timestamp.slice(0, 10)) {
@@ -267,17 +267,17 @@ function updateCharts(logs) {
 
       if (allPeriodLogs.length > 0) {
         const weekStartMs = new Date(allPeriodLogs[0].timestamp).getTime();
-        const weekEndMs   = new Date(allPeriodLogs[allPeriodLogs.length - 1].timestamp).getTime();
-        const totalMin    = (weekEndMs - weekStartMs) / 60000;
-        const maxOffset   = Math.max(0, Math.ceil(totalMin - WEEK_TIME_WINDOW_MIN));
-        weekSliderEl.max  = maxOffset;
+        const weekEndMs = new Date(allPeriodLogs[allPeriodLogs.length - 1].timestamp).getTime();
+        const totalMin = (weekEndMs - weekStartMs) / 60000;
+        const maxOffset = Math.max(0, Math.ceil(totalMin - WEEK_TIME_WINDOW_MIN));
+        weekSliderEl.max = maxOffset;
         weekSliderEl.step = 30;
-        weekSliderValue   = Math.min(weekSliderValue, maxOffset);
+        weekSliderValue = Math.min(weekSliderValue, maxOffset);
         weekSliderEl.value = weekSliderValue;
         weekSliderEl.classList.toggle('hidden', maxOffset === 0);
 
         const winStartMs = weekStartMs + weekSliderValue * 60000;
-        const winEndMs   = winStartMs + WEEK_TIME_WINDOW_MIN * 60000;
+        const winEndMs = winStartMs + WEEK_TIME_WINDOW_MIN * 60000;
         xMin = winStartMs;
         xMax = winEndMs;
         // ms で比較（文字列比較はJST/UTCのズレが生じるため）
@@ -321,7 +321,7 @@ function updateCharts(logs) {
       } else {
         const firstMs = new Date(skipLogs[0].timestamp).getTime();
         const lastLog = skipLogs[skipLogs.length - 1];
-        const lastMs  = new Date(lastLog.timestamp).getTime();
+        const lastMs = new Date(lastLog.timestamp).getTime();
         // ゴーストポイント分まで X 軸を広げる
         const ghostMs = lastLog.snooze_min ? lastMs + Number(lastLog.snooze_min) * 60000 : lastMs;
         xMin = skipLogs.length === 1 ? firstMs - 30 * 60000 : firstMs;
@@ -499,7 +499,7 @@ function updateButtonStates(state) {
   btnStartEl.disabled = breaking || state.is_running;
   btnPauseEl.disabled = breaking || !state.is_running;
   btnResetEl.disabled = breaking;
-  btnEndEl.disabled = breaking;
+  btnEndEl.disabled = false;  // 休憩中もセッション終了可能に変更
   btnSelfEl.disabled = isDialogOpen; // 休憩中も自己申告可能
 }
 
